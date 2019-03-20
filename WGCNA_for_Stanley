@@ -1,0 +1,324 @@
+
+load("datacorBatch.RData") #combatout #13265 142
+sample<-read.csv("sample0914.csv",header=T,row.names=1)
+#cluster
+sampleTree = hclust(dist(t(combatout)), method = "average")
+pdf("sampleClustering.pdf",width=12,height=9)
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5, 
+      cex.axis = 1.5, cex.main = 2)
+abline(h = 150, col = "red")
+dev.off()
+clust = cutreeStatic(sampleTree, cutHeight = 150, minSize = 10)
+table(clust)
+keepSamples=(clust==1)
+datExpr<-combatout[,keepSamples]
+nGenes=nrow(datExpr)
+nSamples=ncol(datExpr)
+
+#PVCA
+theDataMatrix<-t(datExpr)
+dataRowN <- nrow(theDataMatrix)
+dataColN <- ncol(theDataMatrix)
+
+theDataMatrixCentered <- matrix(data = 0, nrow = dataRowN, ncol = dataColN)
+theDataMatrixCentered_transposed = apply(theDataMatrix, 1, scale, center = TRUE, scale = FALSE)
+theDataMatrixCentered = t(theDataMatrixCentered_transposed)
+
+exp_design<-sample
+expDesignRowN <- nrow(exp_design)
+expDesignColN <- ncol(exp_design)
+myColNames <- names(exp_design)
+
+theDataCor <- cor(theDataMatrixCentered)
+
+eigenData <- eigen(theDataCor)
+eigenValues = eigenData$values
+ev_n <- length(eigenValues)
+eigenVectorsMatrix = eigenData$vectors
+eigenValuesSum = sum(eigenValues)
+percents_PCs = eigenValues /eigenValuesSum 
+
+my_counter_2 = 0
+my_sum_2 = 1
+for (i in ev_n:1){
+my_sum_2  = my_sum_2 - percents_PCs[i]
+	if ((my_sum_2) <= pct_threshold ){
+		my_counter_2 = my_counter_2 + 1
+	}
+
+}
+if (my_counter_2 < 3){
+	pc_n  = 3
+
+}else {
+	pc_n = my_counter_2 
+}
+
+pc_data_matrix <- matrix(data = 0, nrow = (expDesignRowN*pc_n), ncol = 1)
+mycounter = 0
+for (i in 1:pc_n){
+	for (j in 1:expDesignRowN){
+	mycounter <- mycounter + 1
+		pc_data_matrix[mycounter,1] = eigenVectorsMatrix[j,i]
+
+	}
+}
+
+AAA <- exp_design[rep(1:expDesignRowN,pc_n),]
+
+Data <- cbind(AAA,pc_data_matrix)
+
+variables <- c(colnames(exp_design))
+    for (i in 1:length(variables)) {
+        Data$variables[i] <- as.factor(Data$variables[i])
+    }
+
+op <- options(warn = (-1))
+    #effects_n = expDesignColN + choose(expDesignColN, 2) + 1
+	effects_n = expDesignColN + 1
+    randomEffectsMatrix <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+
+model.func <- c()
+    index <- 1
+    for (i in 1:length(variables)) {
+        mod = paste("(1|", variables[i], ")", sep = "")
+        model.func[index] = mod
+        index = index + 1
+    }
+    #for (i in 1:(length(variables) - 1)) {
+    #    for (j in (i + 1):length(variables)) {
+    #        mod = paste("(1|", variables[i], ":", variables[j], 
+    #            ")", sep = "")
+    #        model.func[index] = mod
+    #        index = index + 1
+    #    }
+    #}
+    function.mods <- paste(model.func, collapse = " + ")
+    
+    for (i in 1:pc_n) {
+        y = (((i - 1) * expDesignRowN) + 1)
+        funct <- paste("pc_data_matrix", function.mods, sep = " ~ ")
+        Rm1ML <- lmer(funct, Data[y:(((i - 1) * expDesignRowN) + 
+            expDesignRowN), ], REML = TRUE, control=lmerControl(check.nobs.vs.nlev = "ignore",check.nobs.vs.rankZ = "ignore",check.nobs.vs.nRE="ignore"),verbose = FALSE, 
+            na.action = na.omit)
+        randomEffects <- Rm1ML
+        randomEffectsMatrix[i, ] <- c(unlist(VarCorr(Rm1ML)), 
+            resid = sigma(Rm1ML)^2)
+    }
+    effectsNames <- c(names(getME(Rm1ML, "cnms")), "resid")
+
+randomEffectsMatrixStdze <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+for (i in 1:pc_n){
+	mySum = sum(randomEffectsMatrix[i,])
+	for (j in 1:effects_n){
+		randomEffectsMatrixStdze[i,j] = randomEffectsMatrix[i,j]/mySum	
+	}
+}
+
+randomEffectsMatrixWtProp <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+for (i in 1:pc_n){
+	weight = eigenValues[i]/eigenValuesSum
+	for (j in 1:effects_n){
+		randomEffectsMatrixWtProp[i,j] = randomEffectsMatrixStdze[i,j]*weight
+	}
+}
+
+randomEffectsSums <- matrix(data = 0, nrow = 1, ncol = effects_n)
+randomEffectsSums <-colSums(randomEffectsMatrixWtProp)
+totalSum = sum(randomEffectsSums)
+randomEffectsMatrixWtAveProp <- matrix(data = 0, nrow = 1, ncol = effects_n)
+
+for (j in 1:effects_n){
+	randomEffectsMatrixWtAveProp[j] = randomEffectsSums[j]/totalSum 	
+	
+}
+
+pdf("pvca.pdf",height=3.5)
+bp <- barplot(randomEffectsMatrixWtAveProp,  xlab = "Effects", ylab = "Weighted average proportion variance", ylim= c(0,1.0),col = c("blue"), las=2,title="pvca of Cortex")
+
+axis(1, at = bp, labels = effectsNames, xlab = "Effects", las=2,cex.axis=0.5)
+
+## replace the above code of "axis(1, at = bp, labels = effectsNames, xlab = "Effects", cex.axis = 0.5, las=2)" if you want rotate the x axis labels. 
+## text(bp, par("usr")[3]-0.02, srt = 45, adj = 1,labels = effectsNames, xpd = TRUE,cex=0.8)
+
+values = randomEffectsMatrixWtAveProp
+new_values = round(values , 3) ## new_values=format(values,scientific=TRUE,digit=3) 科学计数的形式保留三位有效数字
+text(bp,randomEffectsMatrixWtAveProp,labels = new_values,srt=90, pos=3,cex=0.8) # place numbers on top of bars  srt=90旋转上标
+dev.off()
+
+#adjust
+#线性回归校正，根据PVCA，校正
+sample<-sample[-17,]
+mm<-model.matrix(~-1+sample$Age+sample$Lifetime_Antipsychotics+sample$Smoking_At_TOD+sample$Suicide_Status)
+z<-apply(datExpr,1,function(x){residuals(lm(x~mm))})
+tz<-t(z)
+data_stanley<-tz+rowMeans(datExpr)
+data5<-normalize.quantiles(data_stanley)
+rownames(data5)<-rownames(data_stanley)
+colnames(data5)<-colnames(data_stanley)
+
+
+#WGCNA
+datExpr<-t(data5)
+options(stringsAsFactors = FALSE)
+enableWGCNAThreads()
+powers = c(c(1:10), seq(from = 12, to=20, by=2))
+sft = pickSoftThreshold(datExpr, powerVector = powers, verbose = 5)
+pdf("powerselect.pdf")
+par(mfrow = c(1,2))
+cex1 = 0.9
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",main = paste("Scale independence"))
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],labels=powers,cex=cex1,col="red")
+abline(h=0.90,col="red")
+plot(sft$fitIndices[,1], sft$fitIndices[,5],xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+dev.off()
+
+softPower = 6
+adjacency = adjacency(datExpr, power = softPower,corFnc='bicor')
+TOM = TOMsimilarity(adjacency,TOMType = "signed",verbose = 1)
+dissTOM = 1-TOM
+geneTree = hclust(1-as.dist(TOM), method = "average")
+#rm(list=ls())
+colors = vector(mode="list")
+labels = vector(mode="list")
+  
+for (pam in c(FALSE,TRUE)) {
+    for (minModSize in c(50,100, 200)) {
+      for (dthresh in c(0.1, 0.2)) {
+        for(ds in c(0:4)) { 
+            print(paste("DS=", ds, ",MMS=", minModSize, ",DCOR=",dthresh,",PAM=",pam,sep=""))
+            
+            tree = cutreeHybrid(dendro = geneTree, minClusterSize= minModSize, pamStage=pam, cutHeight = 0.999, deepSplit=ds, distM=as.matrix(1-as.dist(TOM)))
+            merged = mergeCloseModules(exprData= datExpr, colors = tree$labels, cutHeight=dthresh)
+            colors = cbind(colors, labels2colors(merged$colors))
+            
+            labels = c(labels, paste("DS=", ds, ",MMS=", minModSize, ",DCOR=",dthresh,",PAM=",pam,sep=""))
+        }
+      }
+    }
+  }
+  
+  plotDendroAndColors(geneTree, colors, groupLabels=labels, addGuide= TRUE, dendroLabels=FALSE, main="Dendrogram", cex.colorLabels=0.5)
+  save(file="WGCNA_diffParams.rda", geneTree, colors, labels)
+  
+  
+  
+  plotDendroAndColors(geneTree,colors,addGuide=T,dendroLabels=F)
+
+  pdf("WGCNA_diffParams.pdf",width=6,height=8)
+  plotDendroAndColors(geneTree,colors,groupLabels = labels,addGuide=T,dendroLabels=F,cex.colorLabels=0.3)
+  dev.off()
+ 
+DS=1, mms=50, DCOR=0.1, PAM=TRUE
+ 
+tree = cutreeHybrid(dendro = geneTree, minClusterSize= 50, pamStage=TRUE, cutHeight = 0.999, deepSplit=1, distM=as.matrix(1-as.dist(TOM)))
+merged = mergeCloseModules(exprData= datExpr, colors = tree$labels, cutHeight=0.1)
+colors = labels2colors(merged$colors)
+table(colors)
+length(table(colors))
+
+pdf("geneTree.pdf")
+plotDendroAndColors(geneTree,colors,groupLabels = "mod",cex.colorLabels = 0.5,addGuide=T,dendroLabels=F)
+dev.off()
+
+MEs = moduleEigengenes(expr = datExpr, colors, softPower = 6)
+kMEtable = signedKME(datExpr,MEs$eigengenes)
+write.csv(file="kME_table.csv", kMEtable)
+MMPvalue=as.data.frame(corPvalueStudent(as.matrix(kMEtable),nSamples))
+write.csv(MMPvalue,file="kME_Pvalue.csv")
+save(file="agonalstate_1217.RData", datExpr, sample, geneTree, colors,MEs, kMEtable)
+
+informatio<-data.frame(gene=colnames(datExpr),module=colors)
+write.csv(informatio,file="geneinfo.csv")
+
+nGenes=ncol(datExpr)
+nSamples=nrow(datExpr)
+MEs0<-MEs$eigengenes
+MEs1 = orderMEs(MEs0)
+moduleTraitCor=cor(MEs1,sample,use="p")
+moduleTraitPvalue=corPvalueFisher(moduleTraitCor,nSamples=141)
+moduleTraitP.fdr = p.adjust(moduleTraitPvalue, "fdr")
+dim(moduleTraitP.fdr) = dim(moduleTraitPvalue)
+dimnames(moduleTraitP.fdr) = dimnames(moduleTraitPvalue);
+textMatrix =  paste(signif(moduleTraitCor, 2), "\n(",
+                           signif(moduleTraitP.fdr, 1), ")", sep = "")
+pdf("heatmap.pdf",width=14,height=8)
+par(mar = c(6, 8.5, 3, 3))
+labeledHeatmap(Matrix = moduleTraitCor,
+               xLabels = names(sample),
+               yLabels = names(MEs1),
+               ySymbols = names(MEs1),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+dev.off()
+
+#cell-type enrichment
+eigmat = MEs$eigengenes
+colnames(eigmat) = gsub("ME","",colnames(eigmat))
+
+zhang.datExpr = read.csv("datExpr.zhangHuman.avgForPSI.csv",row.names=1)[,-1]
+set.seed(100)
+pSI.output = specificity.index(pSI.in=zhang.datExpr,bts=100,p_max=.1, e_min=0.3) 
+pSI.count(pSI.output)
+
+cell.p.zhang = matrix(NA, 14,5)
+rownames(cell.p.zhang) = unique(colors)
+colnames(cell.p.zhang) = colnames(pSI.output)
+
+for(mod in rownames(cell.p.zhang)) {
+    f = fisher.iteration(pSI.output, rownames(t(datExpr))[colors==mod],p.adjust = F)
+    cell.p.zhang[mod,] = f$`0.05 - nominal`
+}
+
+cell.p.zhang.fdr = p.adjust(cell.p.zhang,"fdr")
+dim(cell.p.zhang.fdr) = dim(cell.p.zhang)
+dimnames(cell.p.zhang.fdr) = dimnames(cell.p.zhang)
+to_plot = cell.p.zhang.fdr[c("green", "turquoise", "brown", "blue", "red", "black","pink","grey","magenta","purple","lightcyan","greenyellow","salmon","grey60"),]
+
+
+dendro.col = as.dendrogram(hclust(as.dist(1-bicor(zhang.datExpr)), method="average"))
+denro.row= as.dendrogram(hclust(as.dist(1-bicor(eigmat[,c("green", "turquoise", "brown", "blue", "red", "black","pink","grey","magenta","purple","lightcyan","greenyellow","salmon","grey60")])),method="average"))
+
+pdf("CellType.pdf",width=6,height=5)
+heatmap.2(-log10(to_plot),col=blueWhiteRed(1000,1)[500:1000],
+          scale="none",trace="none",cexRow = 0.8,cexCol = .8, density.info = "none",
+          colsep=0:7,rowsep=0:8,sepcolor="grey",sepwidth=c(0.02,0.02),
+          srtCol=45,offsetRow=0,offsetCol=-0.5,
+          Rowv=denro.row, Colv=dendro.col,
+          key=T,key.xlab="-log10(P)", cellnote=signif(to_plot,1), notecex=.8, notecol="black",main="Enrichment")
+dev.off()
+
+#pick up module Black and Lightcyan, ranked
+library(gProfileR)
+library(ggplot2)
+black<-read.csv("moduleBlack.csv",header=T)
+go_black<-gprofiler(query=as.vector(black[,1]), max_set_size = 1000, correction_method = "fdr",hier_filtering = "strong", custom_bg = as.vector(colnames(datExpr)), src_filter = c("GO", "KEGG"),ordered_query = T)
+d<-go_black[order(go_black$overlap.size,decreasing=TRUE)[1:25],]
+pdf("GO_Black.pdf",width=10,height=10)
+ggplot(d, aes(x=reorder(term.name, -log10(p.value)), y=-log10(p.value))) + geom_bar(stat="identity", fill="blue") + coord_flip() +labs(x='',title='module Black') + geom_hline(yintercept=-log10(0.05), lty=2, color="red")+theme(axis.text.y = element_text(size=15))
+dev.off()
+write.csv(go_black,file="GO_Black.csv")
+
+lightcyan<-read.csv("moduleLightcyan.csv",header=T)
+go_lightcyan<-gprofiler(query=as.vector(lightcyan[,1]), max_set_size = 1000, correction_method = "fdr",hier_filtering = "strong", custom_bg = as.vector(colnames(datExpr)), src_filter = c("GO", "KEGG"),ordered_query = T)
+d<-go_lightcyan[order(go_lightcyan$overlap.size,decreasing=TRUE)[1:13],]
+pdf("GO_Lightcyan.pdf",width=12,height=8)
+ggplot(d, aes(x=reorder(term.name, -log10(p.value)), y=-log10(p.value))) + geom_bar(stat="identity", fill="blue") + coord_flip() +labs(x='',title='module Lightcyan') + geom_hline(yintercept=-log10(0.05), lty=2, color="red")+theme(axis.text.y = element_text(size=15))
+dev.off()
+write.csv(go_lightcyan,file="GO_Lightcyan.csv")
+
+
+
+
+
+
+
+
