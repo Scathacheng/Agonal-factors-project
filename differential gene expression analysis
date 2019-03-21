@@ -1,0 +1,114 @@
+setwd("../agonal0306/")
+a<-load("data0306.RData")
+a
+#[1] "datstanley"    "datrush"       "samplestanley" "samplerush"  
+c<-intersect(rownames(datstanley),rownames(datrush))
+length(c)
+#[1] 9943
+datstanley2<-datstanley[c,]
+datrush2<-datrush[c,]
+
+library(DESeq2)
+library(edgeR)
+library(GenomicAlignments)
+library(airway)
+library(Rsamtools)
+library(GenomicFeatures)
+library(magrittr)
+
+#stanley
+#DESeq2
+datstanley3<-2^datstanley2 
+#明显这个数据是做过log转换的
+#可能就是因为做过log转换，导致数据之间的差距被压缩
+#导致用integer类型计算的时候找不到差异的基因
+data1<-as.integer(datstanley3)
+dim(data1)<-dim(datstanley3)
+dimnames(data1)<-dimnames(datstanley3)
+dds<-DESeqDataSetFromMatrix(countData=data1,colData=samplestanley,design=~Rate_Of_Death)
+dds
+# class: DESeqDataSet 
+# dim: 9943 141 
+# metadata(1): version
+# assays(1): counts
+# rownames(9943): ENSG00000000003 ENSG00000000419 ... ENSG00000267272
+  # ENSG00000267680
+# rowData names(0):
+# colnames(141): A-1 A-2 ... C-57 C-59
+# colData names(15): Age PMI ... Exacerbation Lifetime_Antipsychotics
+dds1<-DESeq(dds)
+res<-results(dds1)
+head(res)
+table(res$padj<0.05)
+# FALSE  TRUE 
+ # 9649   294 
+#edgeR
+genetable<-data.frame(gene.id=rownames(data1))
+dge<-DGEList(counts=data1,samples=samplestanley,genes=genetable)
+design<-model.matrix(~Rate_Of_Death,dge$samples)
+dge<-calcNormFactors(dge)
+dge<-estimateDisp(dge,design)
+fit<-glmFit(dge,design)
+lrt<-glmLRT(fit,coef=ncol(design))
+tt<-topTags(lrt,n=nrow(dge),p.value=0.1)
+tt.all<-topTags(lrt,n=nrow(dge),sort.by="none")
+table(DESeq2=res$padj<0.05,edgeR=tt.all$table$FDR<0.05)
+#整在一起
+write.csv(res,file="stanley_deseq2.csv")
+write.csv(tt.all,file="stanley_edgeR.csv")
+all <- cbind(res,tt.all)
+all.result <- all[which(all[,6]<0.05&all[,12]<0.05),]
+write.csv(all.result,"stanley_DEG.csv")
+
+
+
+#Rush
+datrush3<-2^datrush2
+datrush3<-t(datrush3)
+datrush3<-t(datrush3)
+data2<-as.integer(datrush3)
+dim(data2)<-dim(datrush3)
+dimnames(data2)<-dimnames(datrush3)
+data2<-t(data2)
+dds<-DESeqDataSetFromMatrix(countData=data2,colData=samplerush,design=~agonal)
+dds
+# class: DESeqDataSet 
+# dim: 9943 536 
+# metadata(1): version
+# assays(1): counts
+# rownames(9943): ENSG00000000003 ENSG00000000419 ... ENSG00000267272
+  # ENSG00000267680
+# rowData names(0):
+# colnames(536): 482428 1243685 ... 74753465 60747316
+# colData names(18): msex race ... ldai_bl agonal
+dds2<-DESeq(dds)
+res<-results(dds2)
+head(res)
+table(res$padj<0.05)
+# FALSE  TRUE 
+ # 6639  1954
+#edgeR
+genetable<-data.frame(gene.id=rownames(data2))
+dge<-DGEList(counts=data2,samples=samplerush,genes=genetable)
+design<-model.matrix(~agonal,dge$samples)
+dge<-calcNormFactors(dge)
+dge<-estimateDisp(dge,design)
+fit<-glmFit(dge,design)
+lrt<-glmLRT(fit,coef=ncol(design))
+tt<-topTags(lrt,n=nrow(dge),p.value=0.1)
+tt.all<-topTags(lrt,n=nrow(dge),sort.by="none")
+table(DESeq2=res$padj<0.05,edgeR=tt.all$table$FDR<0.05)
+       # edgeR
+# DESeq2  FALSE TRUE
+  # FALSE  6589   50
+  # TRUE     73 1881
+#整在一起
+write.csv(res,file="rush_deseq2.csv")
+write.csv(tt.all,file="rush_edgeR.csv")
+all2 <- cbind(res,tt.all)
+all.result2 <- all[which(all2[,6]<0.05&all2[,12]<0.05),]
+write.csv(all.result2,"rush_DEG.csv")
+
+
+
+
