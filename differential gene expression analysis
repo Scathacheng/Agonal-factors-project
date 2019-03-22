@@ -25,8 +25,8 @@ datstanley3<-2^datstanley2
 data1<-as.integer(datstanley3)
 dim(data1)<-dim(datstanley3)
 dimnames(data1)<-dimnames(datstanley3)
-dds<-DESeqDataSetFromMatrix(countData=data1,colData=samplestanley,design=~Rate_Of_Death)
-dds
+dds_stanley<-DESeqDataSetFromMatrix(countData=data1,colData=samplestanley,design=~Rate_Of_Death)
+dds_stanley
 # class: DESeqDataSet 
 # dim: 9943 141 
 # metadata(1): version
@@ -36,28 +36,35 @@ dds
 # rowData names(0):
 # colnames(141): A-1 A-2 ... C-57 C-59
 # colData names(15): Age PMI ... Exacerbation Lifetime_Antipsychotics
-dds1<-DESeq(dds)
-res<-results(dds1)
-head(res)
-table(res$padj<0.05)
+dds_stanley<-DESeq(dds_stanley)
+res_stanley<-results(dds_stanley)
+head(res_stanley)
+table(res_stanley$padj<0.05)
 # FALSE  TRUE 
  # 9649   294 
 #edgeR
-genetable<-data.frame(gene.id=rownames(data1))
-dge<-DGEList(counts=data1,samples=samplestanley,genes=genetable)
-design<-model.matrix(~Rate_Of_Death,dge$samples)
-dge<-calcNormFactors(dge)
-dge<-estimateDisp(dge,design)
-fit<-glmFit(dge,design)
-lrt<-glmLRT(fit,coef=ncol(design))
-tt<-topTags(lrt,n=nrow(dge),p.value=0.1)
-tt.all<-topTags(lrt,n=nrow(dge),sort.by="none")
-table(DESeq2=res$padj<0.05,edgeR=tt.all$table$FDR<0.05)
+genetable1<-data.frame(gene.id=rownames(data1))
+dge1<-DGEList(counts=data1,samples=samplestanley,genes=genetable1)
+design1<-model.matrix(~Rate_Of_Death,dge1$samples)
+dge1<-calcNormFactors(dge1)
+dge1<-estimateDisp(dge1,design1)
+fit1<-glmFit(dge1,design1)
+lrt1<-glmLRT(fit1,coef=ncol(design1))
+tt1<-topTags(lrt1,n=nrow(dge1),p.value=0.1)
+tt.all1<-topTags(lrt1,n=nrow(dge1),sort.by="none")
+table(tt.all1$table$FDR<0.05)
+# FALSE  TRUE 
+ # 9636   307 
+table(DESeq2=res_stanley$padj<0.05,edgeR=tt.all1$table$FDR<0.05)
+       # edgeR
+# DESeq2  FALSE TRUE
+  # FALSE  9626   23
+  # TRUE     10  284
 #整在一起
-write.csv(res,file="stanley_deseq2.csv")
-write.csv(tt.all,file="stanley_edgeR.csv")
-all <- cbind(res,tt.all)
-all.result <- all[which(all[,6]<0.05&all[,12]<0.05),]
+write.csv(res_stanley,file="stanley_deseq2.csv")
+write.csv(tt.all1,file="stanley_edgeR.csv")
+all <- cbind(res_stanley,tt.all1)
+all.result <- all[(all[,6]<0.05&all[,12]<0.05),]
 write.csv(all.result,"stanley_DEG.csv")
 
 
@@ -65,13 +72,12 @@ write.csv(all.result,"stanley_DEG.csv")
 #Rush
 datrush3<-2^datrush2
 datrush3<-t(datrush3)
-datrush3<-t(datrush3)
 data2<-as.integer(datrush3)
 dim(data2)<-dim(datrush3)
 dimnames(data2)<-dimnames(datrush3)
 data2<-t(data2)
-dds<-DESeqDataSetFromMatrix(countData=data2,colData=samplerush,design=~agonal)
-dds
+dds_rush<-DESeqDataSetFromMatrix(countData=data2,colData=samplerush,design=~agonal)
+dds_rush
 # class: DESeqDataSet 
 # dim: 9943 536 
 # metadata(1): version
@@ -81,34 +87,40 @@ dds
 # rowData names(0):
 # colnames(536): 482428 1243685 ... 74753465 60747316
 # colData names(18): msex race ... ldai_bl agonal
-dds2<-DESeq(dds)
-res<-results(dds2)
-head(res)
-table(res$padj<0.05)
+dds_rush<-DESeq(dds_rush)
+res_rush<-results(dds_rush)
+head(res_rush)
+table(res_rush$padj<0.05)
 # FALSE  TRUE 
  # 6639  1954
 #edgeR
-genetable<-data.frame(gene.id=rownames(data2))
-dge<-DGEList(counts=data2,samples=samplerush,genes=genetable)
-design<-model.matrix(~agonal,dge$samples)
-dge<-calcNormFactors(dge)
-dge<-estimateDisp(dge,design)
-fit<-glmFit(dge,design)
-lrt<-glmLRT(fit,coef=ncol(design))
-tt<-topTags(lrt,n=nrow(dge),p.value=0.1)
-tt.all<-topTags(lrt,n=nrow(dge),sort.by="none")
-table(DESeq2=res$padj<0.05,edgeR=tt.all$table$FDR<0.05)
+genetable2<-data.frame(gene.id=rownames(data2))
+dge2<-DGEList(counts=data2,samples=samplerush,genes=genetable2)
+design2<-model.matrix(~agonal,dge2$samples)
+dge2<-calcNormFactors(dge2)
+dge2<-estimateDisp(dge2,design2)
+fit2<-glmFit(dge2,design2)
+lrt2<-glmLRT(fit2,coef=ncol(design2))
+tt2<-topTags(lrt2,n=nrow(dge2),p.value=0.1)
+tt.all2<-topTags(lrt2,n=nrow(dge2),sort.by="none")
+table(DESeq2=res_rush$padj<0.05,edgeR=tt.all2$table$FDR<0.05)
        # edgeR
 # DESeq2  FALSE TRUE
   # FALSE  6589   50
   # TRUE     73 1881
 #整在一起
-write.csv(res,file="rush_deseq2.csv")
-write.csv(tt.all,file="rush_edgeR.csv")
-all2 <- cbind(res,tt.all)
+write.csv(res_rush,file="rush_deseq2.csv")
+write.csv(tt.all2,file="rush_edgeR.csv")
+all2 <- cbind(res_rush,tt.all2)
 all.result2 <- all[which(all2[,6]<0.05&all2[,12]<0.05),]
 write.csv(all.result2,"rush_DEG.csv")
 
-
-
+h<-intersect(rownames(all.result),rownames(all.result2))
+length(h)
+# [1] 97
+deg_stanley<-all.result[h,]
+deg_rush<-all.result2[h,]
+save(deg_rush,deg_stanley,file="DEG_agonal.RData")
+b<-cbind(deg_rush,deg_stanley)
+write.csv(b,file="overlap_DEG.csv")
 
