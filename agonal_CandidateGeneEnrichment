@@ -1,0 +1,104 @@
+
+library(org.Hs.eg.db)
+library(clusterProfiler)
+
+setwd("../data0523/rosmap")
+DEG1<-read.csv("deseq2_fever.csv",header=T,row.names=1)
+DEG2<-read.csv("deseq2_infect.csv",header=T,row.names=1)
+geneinfo<-read.csv("geneinfo_rosmap0821.csv",header=T,row.names=1)
+module<-list()
+module[[1]]<-geneinfo[which(geneinfo$color=="grey60"),]
+module[[2]]<-geneinfo[which(geneinfo$color=="greenyellow"),]
+module[[3]]<-geneinfo[which(geneinfo$color=="pink"),]
+module[[4]]<-geneinfo[which(geneinfo$color=="tan"),]
+module[[5]]<-geneinfo[which(geneinfo$color=="turquoise"),]
+module[[6]]<-DEG1[which(DEG1$padj<0.05),]
+module[[7]]<-DEG2[which(DEG2$padj<0.05),]
+module[[6]]$gene<-rownames(module[[6]])
+module[[7]]$gene<-rownames(module[[7]])
+
+candidate1<-read.csv("../disease_candidate.csv",header=T)
+candidate2<-read.csv("../ADcandidategenes.csv",header=T)
+colnames(candidate1)[1]<-"Names"
+colnames(candidate2)[1]<-"Names"
+# genelist<-candidate2$Gene.name
+# geneensembl<-bitr(genelist,fromType="SYMBOL",toType="ENSEMBL",OrgDb="org.Hs.eg.db",drop=TRUE)
+
+cate1<-levels(candidate1[,1])
+cate2<-levels(candidate2[,1])
+enrich<-list()
+for (i in 1:36) {
+enrich[[i]]<-candidate1[which(candidate1$Names==cate1[i]),]
+}
+for (i in 37:47) {
+enrich[[i]]<-candidate2[which(candidate1$Names==cate2[i]),]
+}
+
+result_p<-matrix(NA,nrow=7,ncol=47)
+result_or<-matrix(NA,nrow=7,ncol=47)
+result_overlap<-matrix(NA,nrow=7,ncol=47)
+for (i in 1:7) {
+	for (j in 1:47) {
+a<-length(intersect(module[[i]]$gene,enrich[[j]]$Ensembl_gene_id))
+b<-length(intersect(enrich[[j]]$Ensembl_gene_id,setdiff(geneinfo$gene,module[[i]]$gene)))
+d<-length(intersect(module[[i]]$gene,setdiff(candidate1$Ensembl_gene_id,enrich[[j]]$Ensembl_gene_id)))
+e<-length(intersect(setdiff(geneinfo$gene,module[[i]]$gene),setdiff(candidate1$Ensembl_gene_id,enrich[[j]]$Ensembl_gene_id)))
+x<-c(b,e,a,d)
+dim(x)<-c(2,2)
+or<-(b*d)/(a*e)
+result_p[i,j]<-fisher.test(x)$p.value
+result_or[i,j]<-or
+result_overlap[i,j]<-a
+}}
+rownames(result_overlap)<-c("CEM_ME17","CEM_ME11","CEM_ME8","CEM_ME12","CEM_ME1","DEG_fever","DEG_infection")
+colnames(result_overlap)<-union(cate1,cate2)
+rownames(result_p)<-c("CEM_ME17","CEM_ME11","CEM_ME8","CEM_ME12","CEM_ME1","DEG_fever","DEG_infection")
+colnames(result_p)<-union(cate1,cate2)
+rownames(result_or)<-c("CEM_ME17","CEM_ME11","CEM_ME8","CEM_ME12","CEM_ME1","DEG_fever","DEG_infection")
+colnames(result_or)<-union(cate1,cate2)
+
+
+write.csv(result_overlap,"result_overlap.csv")
+write.csv(result_or,"result_or.csv")
+write.csv(result_p,"result_p.csv")
+
+# result_overlap<-read.csv("result_overlap.csv",header=T,row.names=1)
+# result_or<-read.csv("result_overlap.csv",header=T,row.names=1)
+# result_p<-read.csv("result_p.csv",header=T,row.names=1)
+# labels_col = c("ASD_CoexDown_M1_Gupta","ASD_CoexUp_M5_Gupta","ASD_CoexUp_Parikshak_M19","ASD_E_DEUpArray","SCZ_DEG_psychENCODE")
+# result<-result_overlap[,labels_col]
+# resultp<-result_p[,labels_col]
+# result<-as.matrix(result)
+# resultp[1,1:4]<-0.99999
+# resultp[2:4,5]<-0.99999
+# bp<-barplot(result,names.arg=colnames(result),col=c("grey","greenyellow","pink","tan","turquoise"),legend=rownames(result),beside=TRUE)
+# values = resultp
+# new_values = round(values , 5)
+# text(bp,resultp,labels = new_values,srt=90, pos=3,cex=0.8)
+
+#######heatmap
+library(pheatmap)
+library(RColorBrewer)
+#labels_col = c("ASD_CoexDown_M12_Voineagu","ASD_CoexDown_Parikshak_M10","ASD_CoexDown_Parikshak_M16","ASD_CoexUp_M16_Voineagu","ASD_CoexUp_M5_Gupta","ASD_CoexUp_M6_Gupta","ASD_CoexUp_Parikshak_M20","ASD_CoexUP_Parikshak_M9","ASD_DEG_psychENCODE","ASD_E_DEG_RNAseq","ASD_G_FMRPTargets","MDD_DEDownArray_Gandal","SCZ_Coexp_M1A","SCZ_Coexp_M3A","SCZ_DEDownArray_Gandal","SCZ_DEUpArray_Gandal","SCZ_DEG_psychENCODE","SCZ_DEG_RNAseq_Gandal","SCZ_DEUpArray_Gandal")
+labels_col=colnames(result_or)
+resultor<-result_or[,labels_col]
+resultor[which(resultor=="Inf")]=-1
+resultor[which(resultor=="NaN")]=1
+resultor[which(resultor<1)]=1
+resultp<-result_p[,labels_col]
+resultp[which(resultor<=1)]=0.1
+# annotation_col = data.frame(resultor)
+# annotation_col[,1]=rep(c("low","middle"),c(4,1))
+# annotation_col[,2]=rep(c("high","middle","low"),c(1,2,2))
+# annotation_col[,3]=rep(c("low","middle","low"),c(1,3,1))
+# annotation_col[,4]=rep(c("low","middle","low"),c(1,3,1))
+# annotation_col[,5]=rep(c("low","middle"),c(1,4))
+# rownames(annotation_col) = "module"#rownames(annotation_col) = paste("Test", 1:28, sep = "")
+# head(annotation_col)
+# ann_colors = list(c(high="#FF0000",middle="#CD5C5C",low="#FFFAFA"))
+
+bk = unique(c(seq(1,2, length=50)))
+p<-pheatmap(resultor,cellwidth=20,cellheight = 20,cluster_cols=F,gaps_col=c(8),labels_col = labels_col,display_numbers = matrix(ifelse(resultp < 0.01, "**", ifelse(resultp<0.05,'*',"")), nrow(resultp)),color = colorRampPalette(colors = c("white","firebrick3"))(100/2),breaks=bk,annotation_colors = ann_colors,fontsize=14)
+pdf("heatmap_DiseaseEnrichment.pdf",width=20,height=10)
+p
+dev.off()
