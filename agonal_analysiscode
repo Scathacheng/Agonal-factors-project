@@ -1,0 +1,979 @@
+#0819
+#agonal factor project
+
+library(WGCNA)
+library(ggfortify) #PCA
+library(scales) #PCA
+library(corrplot) #PCA
+library(lme4) #PVCA
+library(sva)
+library(DESeq2)
+library(preprocessCore)
+library(gplots)
+library(pSI)
+library(gProfileR)
+library(ggplot2)
+
+setwd("../data0523/rosmap/")
+
+###rosmap_brain_data
+#detailed preprocess code in datapreprocess.r#
+a<-load("rosmap0918.RData") #"data_rosmap"  "samplerosmap" #19137   263
+data_rosmap_log<-log(data_rosmap+1,base=2)
+#过滤23690880
+sampleTree = hclust(dist(t(data_rosmap_log)), method = "average")
+#pdf("sampleClustering-rosmap.pdf",width=12,height=9)
+par(cex = 0.6);
+par(mar = c(0,4,2,0))
+plot(sampleTree, main = "Sample clustering to detect outliers", sub="", xlab="", cex.lab = 1.5, 
+      cex.axis = 1.5, cex.main = 2)
+abline(h = 150, col = "red")
+#dev.off()
+clust = cutreeStatic(sampleTree, cutHeight = 150, minSize = 10)
+table(clust)
+keepSamples=(clust==1)
+data_rosmap<-data_rosmap_log[,keepSamples]
+overlap<-intersect(colnames(data_rosmap),rownames(samplerosmap))
+data_rosmap<-data_rosmap[,overlap]
+samplerosmap<-samplerosmap[overlap,]
+dim(data_rosmap)
+# 19137   262
+dim(samplerosmap)
+# 262  24
+save(data_rosmap,samplerosmap,file="rosmap0921.RData")
+names(samplerosmap)
+ # [1] "msex"          "race"          "spanish"       "educ"         
+ # [5] "age_bl"        "age_death"     "cogdx"         "pmi"          
+ # [9] "ceradsc"       "niareagansc"   "braaksc"       "dlbdx"        
+# [13] "ci_num2_gtt"   "ci_num2_mtt"   "smoking"       "alcohol_g_bl" 
+# [17] "ldai_bl"       "surgery"       "brthprb"       "fever"        
+# [21] "infect"        "unconc"        "ventilat"      "agonal.factor"
+
+###GSE92538_agonal_data
+#detailed preprocess code in 0523GSE92538.r#
+b<-load("data0618.RData") #"data7"   "sample4"
+dim(data7)
+# 10820   335
+dim(sample4)
+# 335  10
+data_agonal<-data7
+sampleagonal<-sample4
+sampleagonal<-sampleagonal[,-2]
+names(sampleagonal)[7]<-"PMI"
+save(data_agonal,sampleagonal,file="agonal0819.RData")
+names(sampleagonal)
+ # [1] "diagnosis"            "subject.id"           "agonal.factor"       
+ # [4] "tissue_ph"            "gender"               "race"                
+ # [7] "PMI"                  "post_mortem_interval" "suicide_.1.yes."     
+# [10] "qc_batch"   
+
+#a<-load("rosmap0921.RData")
+#b<-load("agonal0819.RData")
+##combine data
+overlap<-intersect(rownames(data_rosmap),rownames(data_agonal))
+length(overlap)
+# [1] 9092
+data_rosmap<-data_rosmap[overlap,]
+data_agonal<-data_agonal[overlap,]
+#去掉一些不需要的样本信息
+samplerosmap2<-samplerosmap[,-12:-17]
+ # [1] "msex"          "race"          "spanish"       "educ"         
+ # [5] "age_bl"        "age_death"     "cogdx"         "pmi"          
+ # [9] "ceradsc"       "niareagansc"   "braaksc"       "dlbdx"        
+# [13] "ci_num2_gtt"   "ci_num2_mtt"   "smoking"       "alcohol_g_bl" 
+# [17] "ldai_bl"       "surgery"       "brthprb"       "fever"        
+# [21] "infect"        "unconc"        "ventilat"      "agonal.factor"
+samplerosmap2<-samplerosmap2[,-7]
+samplerosmap2<-samplerosmap2[,-11:-16]
+ # [1] "msex"          "race"          "spanish"       "educ"         
+ # [5] "age_bl"        "age_death"     "pmi"           "ceradsc"      
+ # [9] "niareagansc"   "braaksc"       "agonal.factor"
+save(data_rosmap,samplerosmap2,data_agonal,sampleagonal,file="data_bf_1006.RData")
+
+###pca
+#rosmap
+expr<-as.matrix(t(data_rosmap))
+#pdf("pca_rosmap0922.pdf")
+pc<-prcomp(expr)
+#autoplot(pc)
+eigs<-pc$sdev^2 # calculate how much variance explained by each PC.
+eigsP1<-percent(eigs[1]/sum(eigs))
+eigsP2<-percent(eigs[2]/sum(eigs))
+plot(pc$x[,1],pc$x[,2],col=samplerosmap2$agonal.factor+1,pch=19,main="PCA",xlab=paste("PC1 (",eigsP1,")",sep=""),ylab=paste("PC2 (",eigsP2,")",sep=""))
+#dev.off()
+data_pca<-prcomp(t(expr))
+#pdf("pca_unknown_rosmap0922.pdf")
+corrplot(cor(data_pca$rotation[,1:10],samplerosmap2))
+#dev.off()
+
+#agonal
+expr<-as.matrix(t(data_agonal))
+#pdf("pca_agonal0922.pdf")
+pc<-prcomp(expr)
+#autoplot(pc)
+eigs<-pc$sdev^2 # calculate how much variance explained by each PC.
+eigsP1<-percent(eigs[1]/sum(eigs))
+eigsP2<-percent(eigs[2]/sum(eigs))
+plot(pc$x[,1],pc$x[,2],col=sampleagonal$agonal.factor+1,pch=19,main="PCA",xlab=paste("PC1 (",eigsP1,")",sep=""),ylab=paste("PC2 (",eigsP2,")",sep=""))
+#dev.off()
+data_pca<-prcomp(t(expr))
+#pdf("pca_unknown_agonal0922.pdf")
+corrplot(cor(data_pca$rotation[,1:10],sampleagonal))
+#dev.off()
+
+
+###SVD
+#rosmap
+expr<-as.matrix(t(data_rosmap))
+cx<-sweep(expr,2,colMeans(expr),"-") 
+sv<-svd(cx)
+names(sv)
+# [1] "d" "u" "v"()
+#pdf("svd_rosmap0820.pdf")
+plot(sv$u[,1],sv$u[,2],main="SVD",xlab="U1",ylab="U2")
+#dev.off()
+#pdf("svd_unknown_rosmap0820.pdf")
+corrplot(cor(sv$u[,1:10],samplerosmap))
+#dev.off()
+
+#agonal
+expr<-as.matrix(t(data_agonal))
+cx<-sweep(expr,2,colMeans(expr),"-") 
+sv<-svd(cx)
+names(sv)
+# [1] "d" "u" "v"()
+#pdf("svd_agonal0820.pdf")
+plot(sv$u[,1],sv$u[,2],col=sampleagonal$agonal.factor+1,main="SVD",xlab="U1",ylab="U2")
+#dev.off()
+#pdf("svd_unknown_agonal0820.pdf")
+corrplot(cor(sv$u[,1:10],sampleagonal))
+#dev.off()
+
+
+##pvca_module
+# theDataMatrix<-data_agonal
+# exp_design<-sampleagonal
+# theDataMatrix<-data_rosmap
+# exp_design<-samplerosmap2
+########################################################################
+pct_threshold=0.8
+
+dataRowN<-nrow(theDataMatrix)
+dataColN<-ncol(theDataMatrix)
+
+theDataMatrixCentered <- matrix(data = 0, nrow = dataRowN, ncol = dataColN)
+theDataMatrixCentered_transposed = apply(theDataMatrix, 1, scale, center = TRUE, scale = FALSE)
+theDataMatrixCentered = t(theDataMatrixCentered_transposed)
+expDesignRowN <- nrow(exp_design)
+expDesignColN <- ncol(exp_design)
+myColNames <- names(exp_design)
+
+theDataCor <- cor(theDataMatrixCentered)
+
+eigenData <- eigen(theDataCor)
+eigenValues = eigenData$values
+ev_n <- length(eigenValues)
+eigenVectorsMatrix = eigenData$vectors
+eigenValuesSum = sum(eigenValues)
+percents_PCs = eigenValues /eigenValuesSum 
+
+my_counter_2 = 0
+my_sum_2 = 1
+for (i in ev_n:1){
+my_sum_2  = my_sum_2 - percents_PCs[i]
+	if ((my_sum_2) <= pct_threshold ){
+		my_counter_2 = my_counter_2 + 1
+	}
+
+}
+if (my_counter_2 < 3){
+	pc_n  = 3
+
+}else {
+	pc_n = my_counter_2 
+}
+
+pc_data_matrix <- matrix(data = 0, nrow = (expDesignRowN*pc_n), ncol = 1)
+mycounter = 0
+for (i in 1:pc_n){
+	for (j in 1:expDesignRowN){
+	mycounter <- mycounter + 1
+		pc_data_matrix[mycounter,1] = eigenVectorsMatrix[j,i]
+
+	}
+}
+
+AAA <- exp_design[rep(1:expDesignRowN,pc_n),]
+
+Data <- cbind(AAA,pc_data_matrix)
+
+variables <- c(colnames(exp_design))
+    for (i in 1:length(variables)) {
+        Data$variables[i] <- as.factor(Data$variables[i])
+    }
+op <- options(warn = (-1))
+    # effects_n = expDesignColN + choose(expDesignColN, 2) + 1
+	effects_n = expDesignColN + 1
+    randomEffectsMatrix <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+
+model.func <- c()
+    index <- 1
+    for (i in 1:length(variables)) {
+        mod = paste("(1|", variables[i], ")", sep = "")
+        model.func[index] = mod
+        index = index + 1
+    }
+    # for (i in 1:(length(variables) - 1)) {
+       # for (j in (i + 1):length(variables)) {
+           # mod = paste("(1|", variables[i], ":", variables[j], 
+               # ")", sep = "")
+           # model.func[index] = mod
+           # index = index + 1
+       # }
+    # }
+    function.mods <- paste(model.func, collapse = " + ")
+    
+    for (i in 1:pc_n) {
+        y = (((i - 1) * expDesignRowN) + 1)
+        funct <- paste("pc_data_matrix", function.mods, sep = " ~ ")
+        Rm1ML <- lmer(funct, Data[y:(((i - 1) * expDesignRowN) + 
+            expDesignRowN), ], REML = TRUE, control=lmerControl(check.nobs.vs.nlev = "ignore",check.nobs.vs.rankZ = "ignore",check.nobs.vs.nRE="ignore"),verbose = FALSE, 
+            na.action = na.omit)
+        randomEffects <- Rm1ML
+        randomEffectsMatrix[i, ] <- c(unlist(VarCorr(Rm1ML)), 
+            resid = sigma(Rm1ML)^2)
+    }
+    effectsNames <- c(names(getME(Rm1ML, "cnms")), "resid")
+
+randomEffectsMatrixStdze <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+for (i in 1:pc_n){
+	mySum = sum(randomEffectsMatrix[i,])
+	for (j in 1:effects_n){
+		randomEffectsMatrixStdze[i,j] = randomEffectsMatrix[i,j]/mySum	
+	}
+}
+randomEffectsMatrixWtProp <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+for (i in 1:pc_n){
+	weight = eigenValues[i]/eigenValuesSum
+	for (j in 1:effects_n){
+		randomEffectsMatrixWtProp[i,j] = randomEffectsMatrixStdze[i,j]*weight
+	}
+}
+randomEffectsSums <- matrix(data = 0, nrow = 1, ncol = effects_n)
+randomEffectsSums <-colSums(randomEffectsMatrixWtProp)
+totalSum = sum(randomEffectsSums)
+randomEffectsMatrixWtAveProp <- matrix(data = 0, nrow = 1, ncol = effects_n)
+
+for (j in 1:effects_n){
+	randomEffectsMatrixWtAveProp[j] = randomEffectsSums[j]/totalSum 	
+	
+}
+# pdf("pvca_agonal0820_bf.pdf",height=3.5)
+# pdf("pvca_rosmap0922_bf.pdf",height=3.5)
+# pdf("pvca_agonal0820_at1.pdf",height=3.5)
+# pdf("pvca_agonal0820_at2.pdf",height=3.5)
+# pdf("pvca_rosmap0922_at1.pdf",height=3.5)
+bp <- barplot(randomEffectsMatrixWtAveProp,  xlab = "Effects", ylab = "Weighted average proportion variance", ylim= c(0,1.0),col = c("blue"), las=2,title="pvca of Cortex")
+axis(1, at = bp, labels = effectsNames, xlab = "Effects", las=2,cex.axis=0.5)
+## replace the above code of "axis(1, at = bp, labels = effectsNames, xlab = "Effects", cex.axis = 0.5, las=2)" if you want rotate the x axis labels. 
+## text(bp, par("usr")[3]-0.02, srt = 45, adj = 1,labels = effectsNames, xpd = TRUE,cex=0.8)
+values = randomEffectsMatrixWtAveProp
+new_values = round(values , 3) ## new_values=format(values,scientific=TRUE,digit=3) 科学计数的形式保留三位有效数字
+text(bp,randomEffectsMatrixWtAveProp,labels = new_values,srt=90, pos=3,cex=0.8) # place numbers on top of bars  srt=90旋转上标
+# dev.off()
+########################################################################
+
+
+
+#agonal
+#adjustment-batch-sva
+expr<-as.matrix(data_agonal)
+modcombat=model.matrix(~agonal.factor+tissue_ph+diagnosis+gender+race+age+PMI+suicide_.1.yes.,data=sampleagonal)
+combat_edata = ComBat(dat=expr, batch=sampleagonal$qc_batch, mod=modcombat, par.prior=TRUE, prior.plots=FALSE)
+
+#adjustment-matrix
+# design2 = model.matrix(~PMI+tissue_ph+age+race+gender, data=sampleagonal)#desigh matrix for ref-based
+# Y<-combat_edata
+# X<-as.matrix(design2)
+# beta = (solve(t(X)%*%X)%*%t(X))%*%t(Y)
+# myRegress_datExpr = Y - t(X[,c(3:ncol(X))] %*% beta[c(3:nrow(beta)),]) # regress all except group
+
+#adjustment-linear model
+data<-t(combat_edata)
+mm<-model.matrix(~PMI+age+race+gender+diagnosis+age+tissue_ph, data=sampleagonal)
+z<-apply(t(data),1,function(x){residuals(lm(x~mm))})
+tz<-t(z)
+datExpr1<-tz+colMeans(data)
+save(datExpr1,file="data_af_agonal0929.RData")
+
+#rosmap
+data<-t(data_rosmap)
+mm<-model.matrix(~msex+race+spanish+educ+age_bl+age_death+pmi+ceradsc+niareagansc+braaksc, data=samplerosmap2)
+z<-apply(t(data),1,function(x){residuals(lm(x~mm))})
+tz<-t(z)
+datExpr2<-tz+colMeans(data)
+
+# adjustment-matrix
+# design2 = model.matrix(~msex+race+spanish+educ+age_bl+age_death+pmi+ceradsc+niareagansc+braaksc, data=samplerosmap2)#desigh matrix for ref-based
+# Y<-data_rosmap
+# X<-as.matrix(design2)
+# beta = (solve(t(X)%*%X)%*%t(X))%*%t(Y)
+# myRegress_datExpr = Y - t(X[,c(2:ncol(X))] %*% beta[c(2:nrow(beta)),]) # regress all except group
+
+#PVCA-atplot
+save(datExpr1,sampleagonal,datExpr2,samplerosmap2,file="data_aft1006.RData")
+
+#DGE
+#agonal
+data1<-2^datExpr1 
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds_agonal<-DESeqDataSetFromMatrix(countData=data2,colData=sampleagonal,design=~as.factor(agonal.factor))
+dds_agonal
+dds_agonal<-DESeq(dds_agonal)
+res_agonal<-results(dds_agonal)
+head(res_agonal)
+# res_agonal[which(res_agonal$padj<0.05),]
+table(res_agonal$padj<0.05)
+# FALSE  TRUE 
+ # 6029  2534 
+write.csv(res_agonal,file="deseq2_agonal1006.csv")
+
+#rosmap
+data1<-2^datExpr2 
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds_rosmap1<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(fever))
+dds_rosmap1<-DESeq(dds_rosmap1)
+res_rosmap1<-results(dds_rosmap1)
+table(res_rosmap1$padj<0.05)
+# FALSE  TRUE 
+ # 5751   344 
+dds_rosmap2<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(infect))
+dds_rosmap2<-DESeq(dds_rosmap2)
+res_rosmap2<-results(dds_rosmap2)
+table(res_rosmap2$padj<0.05)
+# FALSE  TRUE 
+ # 8335    51
+write.csv(res_rosmap1,file="deseq2_fever.csv")
+write.csv(res_rosmap2,file="deseq2_infect.csv")
+#volcano plot
+res_rosmap1<-read.csv("deseq2_fever.csv",header=T,row.names=1)
+res_rosmap2<-read.csv("deseq2_infect.csv",header=T,row.names=1)
+up<-intersect(which(res_rosmap1$padj<0.05),which(res_rosmap1$log2FoldChange>0))
+down<-intersect(which(res_rosmap1$padj<0.05),which(res_rosmap1$log2FoldChange<0))
+sig<-rep("normal",times=nrow(res_rosmap1))
+sig[up]<-"up"
+sig[down]<-"down"
+sig<-factor(sig,levels=c("up","down","normal"))
+p <- ggplot(res_rosmap1)+geom_point(aes(x=log2FoldChange,y=-log10(padj),color=sig),size=0.8)
+p <- p + ggtitle(paste(""))+xlab("log2(FC)")+ylab("-log10(adj.P)")+expand_limits(x=c(-2,2))
+p<-p+scale_color_manual(paste("DEGs","(",total,")"),values=c("up"="red","down"="blue","normal"="grey"))
+p<-p+geom_hline(yintercept=-log10(0.05),linetype="dotdash",size=0.4)+geom_vline(xintercept=c(-1,1),linetype=“dotdash”,size=0.4)
+pdf("deseq2_fever.pdf")
+p
+dev.off()
+
+###slope
+dds_rosmap1<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(fever))
+dds_rosmap1<-DESeq(dds_rosmap1)
+res_rosmap1<-results(dds_rosmap1)
+table(res_rosmap1$padj<0.05)
+# FALSE  TRUE 
+ # 5751   344 
+dds_rosmap2<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(infect))
+dds_rosmap2<-DESeq(dds_rosmap2)
+res_rosmap2<-results(dds_rosmap2)
+table(res_rosmap2$padj<0.05)
+# FALSE  TRUE 
+ # 8335    51
+dds_rosmap3<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(unconc))
+dds_rosmap3<-DESeq(dds_rosmap3)
+res_rosmap3<-results(dds_rosmap3)
+table(res_rosmap3$padj<0.05)
+# FALSE  TRUE 
+ # 4504     5 
+dds_rosmap4<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(brthprb))
+dds_rosmap4<-DESeq(dds_rosmap4)
+res_rosmap4<-results(dds_rosmap4)
+table(res_rosmap4$padj<0.05)
+# FALSE 
+ # 9092 
+dds_rosmap5<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(ventilat))
+dds_rosmap5<-DESeq(dds_rosmap5)
+res_rosmap5<-results(dds_rosmap5)
+table(res_rosmap5$padj<0.05)
+# FALSE 
+ # 9091 
+dds_rosmap6<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(surgery))
+dds_rosmap6<-DESeq(dds_rosmap6)
+res_rosmap6<-results(dds_rosmap6)
+table(res_rosmap6$padj<0.05)
+# FALSE 
+ # 9092 
+
+pcreg = function(ds1, ds2) {
+  #Principle components regression to calculate slope 
+  r = prcomp(~ds1+ds2)
+  slope <- r$rotation[2,1] / r$rotation[1,1]
+  intercept <- r$center[2] - slope*r$center[1]
+  return(list(slope,intercept))
+}
+#1
+dat= data.frame(afs=res_rosmap$log2FoldChange, fever=res_rosmap1$log2FoldChange, infect=res_rosmap2$log2FoldChange, unconc=res_rosmap3$log2FoldChange, brthprb=res_rosmap4$log2FoldChange, ventilat=res_rosmap5$log2FoldChange, surgery=res_rosmap6$log2FoldChange)
+dat2= melt(dat,id=1)
+dat2$value = as.numeric(dat2$value)
+
+fit.fever=pcreg(res_rosmap$log2FoldChange, res_rosmap1$log2FoldChange)
+fit.infect=pcreg(res_rosmap$log2FoldChange, res_rosmap2$log2FoldChange)
+fit.unconc=pcreg(res_rosmap$log2FoldChange, res_rosmap3$log2FoldChange)
+fit.brthprb=pcreg(res_rosmap$log2FoldChange, res_rosmap4$log2FoldChange)
+fit.ventilat=pcreg(res_rosmap$log2FoldChange, res_rosmap5$log2FoldChange)
+fit.surgery=pcreg(res_rosmap$log2FoldChange, res_rosmap6$log2FoldChange)
+
+dat2$variable = as.character(dat2$variable)
+dat2$variable = gsub("fever", paste("fever, slope=", signif(fit.fever[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("infect", paste("infect, slope=", signif(fit.infect[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("unconc", paste("unconc, slope=", signif(fit.unconc[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("brthprb", paste("brthprb, slope=", signif(fit.brthprb[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("ventilat", paste("ventilat, slope=", signif(fit.ventilat[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("surgery", paste("surgery, slope=", signif(fit.surgery[[1]],2), sep=""), dat2$variable)
+
+TxSlope=ggplot(dat2,aes(x=afs,y=value,color=variable)) + geom_point(alpha=.5) + 
+  geom_abline(slope=1, lty=2) + xlim(-1,1) + ylim(-1,1) + 
+  geom_abline(slope=fit.fever[[1]], intercept = fit.fever[[2]], color="#FFD700") + 
+  geom_abline(slope=fit.infect[[1]], intercept = fit.infect[[2]], color="#8EA954") + 
+  geom_abline(slope=fit.unconc[[1]], intercept = fit.unconc[[2]], color="#DA5D3E") +
+  geom_abline(slope=fit.brthprb[[1]], intercept = fit.brthprb[[2]], color="#FF0000") +
+  geom_abline(slope=fit.ventilat[[1]], intercept = fit.ventilat[[2]], color="#727CC5") +
+   geom_abline(slope=fit.surgery[[1]], intercept = fit.surgery[[2]], color="#808000") +
+  xlab("Agonal Facters (log2FC)") + ylab("medical condition (log2FC)") +
+  coord_fixed(ratio=1) 
+
+pdf("deseq2_slope2.pdf",width=5,height=5)
+TxSlope
+dev.off() 
+#2
+dat= data.frame(fever=res_rosmap1$log2FoldChange, infect=res_rosmap2$log2FoldChange, unconc=res_rosmap3$log2FoldChange, brthprb=res_rosmap4$log2FoldChange, ventilat=res_rosmap5$log2FoldChange, surgery=res_rosmap6$log2FoldChange)
+dat2= melt(dat,id=1)
+dat2$value = as.numeric(dat2$value)
+
+fit.infect=pcreg(res_rosmap1$log2FoldChange, res_rosmap2$log2FoldChange)
+fit.unconc=pcreg(res_rosmap1$log2FoldChange, res_rosmap3$log2FoldChange)
+fit.brthprb=pcreg(res_rosmap1$log2FoldChange, res_rosmap4$log2FoldChange)
+fit.ventilat=pcreg(res_rosmap1$log2FoldChange, res_rosmap5$log2FoldChange)
+fit.surgery=pcreg(res_rosmap1$log2FoldChange, res_rosmap6$log2FoldChange)
+
+dat2$variable = as.character(dat2$variable)
+dat2$variable = gsub("surgery", paste("surgery, slope=", signif(fit.surgery[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("infect", paste("infect, slope=", signif(fit.infect[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("unconc", paste("unconc, slope=", signif(fit.unconc[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("brthprb", paste("brthprb, slope=", signif(fit.brthprb[[1]],2), sep=""), dat2$variable)
+dat2$variable = gsub("ventilat", paste("ventilat, slope=", signif(fit.ventilat[[1]],2), sep=""), dat2$variable)
+
+
+TxSlope=ggplot(dat2,aes(x=fever,y=value,color=variable)) + geom_point(alpha=.5) + 
+  geom_abline(slope=1, lty=2) + xlim(-1,1) + ylim(-1,1) + 
+  geom_abline(slope=fit.surgery[[1]], intercept = fit.surgery[[2]], color="#1E1329") + 
+  geom_abline(slope=fit.infect[[1]], intercept = fit.infect[[2]], color="#8EA954") + 
+  geom_abline(slope=fit.unconc[[1]], intercept = fit.unconc[[2]], color="#DA5D3E") +
+  geom_abline(slope=fit.brthprb[[1]], intercept = fit.brthprb[[2]], color="#10B72A") +
+  geom_abline(slope=fit.ventilat[[1]], intercept = fit.ventilat[[2]], color="#727CC5") +
+  xlab("fever (log2FC)") + ylab("medical condition (log2FC)") +
+  coord_fixed(ratio=1) 
+
+pdf("deseq2_slope1.pdf",width=5,height=5)
+TxSlope
+dev.off() 
+
+###replicate agonal
+setwd("../data0523/")
+a<-load("rosmap/data_aft1006.RData")
+library(DESeq2)
+library(preprocessCore)
+#0-1
+sample01<-sampleagonal[which(sampleagonal$agonal.factor!=3),]
+sample01<-sample01[which(sample01$agonal.factor!=2),]
+data01<-datExpr1[,rownames(sample01)]
+data1<-2^data01
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds01<-DESeqDataSetFromMatrix(countData=data2,colData=sample01,design=~as.factor(agonal.factor))
+dds01<-DESeq(dds01)
+res01<-results(dds01)
+#0-2
+sample02<-sampleagonal[which(sampleagonal$agonal.factor!=3),]
+sample02<-sample02[which(sample02$agonal.factor!=1),]
+data02<-datExpr1[,rownames(sample02)]
+data1<-2^data02
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds02<-DESeqDataSetFromMatrix(countData=data2,colData=sample02,design=~as.factor(agonal.factor))
+dds02<-DESeq(dds02)
+res02<-results(dds02)
+#0-3
+sample03<-sampleagonal[which(sampleagonal$agonal.factor!=1),]
+sample03<-sample03[which(sample03$agonal.factor!=2),]
+data03<-datExpr1[,rownames(sample03)]
+data1<-2^data03
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds03<-DESeqDataSetFromMatrix(countData=data2,colData=sample03,design=~as.factor(agonal.factor))
+dds03<-DESeq(dds03)
+res03<-results(dds03)
+ 
+res_fever<-read.csv("rosmap/deseq2_fever.csv",header=T,row.names=1)
+res_infect<-read.csv("rosmap/deseq2_infect.csv",header=T,row.names=1)
+res_fever<-res_fever[which(res_fever$padj<0.05),]
+res_infect<-res_fever[which(res_infect$padj<0.05),]
+res01<-res01[which(res01$padj<0.05),]
+res02<-res02[which(res02$padj<0.05),]
+res03<-res03[which(res03$padj<0.05),]
+
+a<-intersect(rownames(res_fever),rownames(res01)) #147
+a<-intersect(rownames(res_fever),rownames(res02)) #145
+a<-intersect(rownames(res_fever),rownames(res03)) #211
+a<-intersect(rownames(res_infect),rownames(res01)) #3
+a<-intersect(rownames(res_infect),rownames(res02)) #1
+a<-intersect(rownames(res_infect),rownames(res03)) #3
+
+
+
+
+#WGCNA
+#agonal
+library(WGCNA)
+library(preprocessCore)
+data1<-normalize.quantiles(datExpr1)
+dimnames(data1)<-dimnames(datExpr1)
+enableWGCNAThreads()
+powers = c(c(1:10), seq(from = 12, to=20, by=2))
+sft = pickSoftThreshold(t(data1), powerVector = powers, networkType="signed", verbose = 5)
+#pdf("powerselect_agonal0821.pdf")
+par(mfrow = c(1,2))
+cex1 = 0.9
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",main = paste("Scale independence"))
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],labels=powers,cex=cex1,col="red")
+abline(h=0.90,col="red")
+plot(sft$fitIndices[,1], sft$fitIndices[,5],xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+net1<- blockwiseModules(t(data1), power = 12, networkType = "signed", TOMType ="signed", corType="pearson", maxBlockSize=20000, maxModuleSize =4000, minModuleSize =30, reassignThreshold = 0, mergeCutHeight = 0.25, numericLabels = TRUE, pamRespectsDendro = FALSE, saveTOMs = TRUE, saveTOMFileBase ="agonal0821" , verbose = 3)
+
+table(net1$colors)
+moduleLabels1 = net1$colors
+moduleColors1 = labels2colors(net1$colors)
+MEs1 = net1$MEs
+geneTree1 = net1$dendrograms[[1]]
+save(MEs1, moduleLabels1, moduleColors1, geneTree1, data1, net1, file="net_agonal0821.RData")
+
+pdf("WGCNA_agonal0821.pdf")
+plotDendroAndColors(net1$dendrograms[[1]], moduleColors1[net1$blockGenes[[1]]],
+                    "Module colors",
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05)
+dev.off()
+
+table<-net1$colors
+informatio<-data.frame(gene=rownames(data1),module=table,color=labels2colors(net1$colors))
+dim(informatio)
+write.csv(informatio,file="geneinfo_agonal0821.csv")
+
+nGenes=nrow(data1)
+nSamples=ncol(data1)
+MEs0 = moduleEigengenes(t(data1), moduleColors1)$eigengenes
+MEs = orderMEs(MEs0)
+geneModulesMembership=as.data.frame(cor(t(data1),MEs,use="p"))
+MMPvalue=as.data.frame(corPvalueStudent(as.matrix(geneModulesMembership),nSamples))
+write.csv(MMPvalue,file="MMPvalue_agonal0821.csv")
+write.csv(geneModulesMembership,file="MM_agonal0821.csv")
+
+cor1=cor(MEs1,sampleagonal,use="p")
+p1=corPvalueFisher(cor1,nSamples)
+q1<-p.adjust(p1,method="fdr")
+dim(q1)<-dim(p1)
+dimnames(q1)<-dimnames(p1)
+
+expr<-as.matrix(t(data1))
+cx<-sweep(expr,2,colMeans(expr),"-") 
+sv<-svd(cx)
+#pdf("svd_WGCNA_agonal0821.pdf")
+corrplot(cor(sv$u[,1:10],sampleagonal))
+#dev.off()
+
+cor2<-cor(MEs,sv$u[,1:10],use="p")
+p2=corPvalueFisher(cor2,nSamples)
+q2<-p.adjust(p2,method="fdr")
+dim(q2)<-dim(p2)
+dimnames(q2)<-dimnames(p2)
+
+textMatrix =  paste(signif(cor1, 2), "\n(",
+                           signif(q1, 1), ")", sep = "")
+pdf("heatmap_agonal0821.pdf")
+par(mar = c(6, 8.5, 3, 3))
+labeledHeatmap(Matrix = cor1,
+               xLabels = names(sampleagonal),
+               yLabels = names(MEs1),
+               ySymbols = names(MEs1),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+dev.off()
+
+textMatrix =  paste(signif(cor2, 2), "\n(",
+                           signif(q2, 1), ")", sep = "")
+d<-c("factor1","factor2","factor3","factor4","factor5","factor6","factor7","factor8","factor9","factor10")
+pdf("heatmap_factors_agonal0821.pdf")
+par(mar = c(6, 8.5, 3, 3))
+labeledHeatmap(Matrix = cor2,
+               xLabels = d,
+               yLabels = names(MEs),
+               ySymbols = names(MEs),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+dev.off()
+
+
+#rosmap
+library(WGCNA)
+library(preprocessCore)
+data1<-normalize.quantiles(datExpr2)
+dimnames(data1)<-dimnames(datExpr2)
+enableWGCNAThreads()
+powers = c(c(1:10), seq(from = 12, to=20, by=2))
+sft = pickSoftThreshold(t(data1), powerVector = powers, networkType="signed", verbose = 5)
+#pdf("powerselect_rosmap0821.pdf")
+par(mfrow = c(1,2))
+cex1 = 0.9
+plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",main = paste("Scale independence"))
+text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],labels=powers,cex=cex1,col="red")
+abline(h=0.90,col="red")
+plot(sft$fitIndices[,1], sft$fitIndices[,5],xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",main = paste("Mean connectivity"))
+text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
+#dev.off()
+net2<- blockwiseModules(t(data1), power = 12, networkType = "signed", TOMType ="signed", corType="pearson", maxBlockSize=20000, maxModuleSize =4000, minModuleSize =30, reassignThreshold = 0, mergeCutHeight = 0.25, numericLabels = TRUE, pamRespectsDendro = FALSE, saveTOMs = TRUE, saveTOMFileBase ="rosmap0821" , verbose = 3)
+
+table(net2$colors)
+moduleLabels2 = net2$colors
+moduleColors2 = labels2colors(net2$colors)
+MEs2 = net2$MEs
+geneTree2 = net2$dendrograms[[1]]
+save(MEs2, moduleLabels2, moduleColors2, geneTree2, data1, net2, file="net_rosmap0821.RData")
+
+pdf("WGCNA_rosmap0821.pdf")
+plotDendroAndColors(net2$dendrograms[[1]], moduleColors2[net2$blockGenes[[1]]],
+                    "Module colors",
+                    dendroLabels = FALSE, hang = 0.03,
+                    addGuide = TRUE, guideHang = 0.05)
+dev.off()
+
+table<-net2$colors
+informatio<-data.frame(gene=rownames(data1),module=table,color=labels2colors(net2$colors))
+dim(informatio)
+write.csv(informatio,file="geneinfo_rosmap0821.csv")
+
+nGenes=nrow(data1)
+nSamples=ncol(data1)
+MEs0 = moduleEigengenes(t(data1), moduleColors2)$eigengenes
+MEs = orderMEs(MEs0)
+geneModulesMembership=as.data.frame(cor(t(data1),MEs,use="p"))
+MMPvalue=as.data.frame(corPvalueStudent(as.matrix(geneModulesMembership),nSamples))
+write.csv(MMPvalue,file="MMPvalue_rosmap0821.csv")
+write.csv(geneModulesMembership,file="MM_rosmap0821.csv")
+
+cor1=cor(MEs2,samplerosmap2,use="p")
+p1=corPvalueFisher(cor1,nSamples)
+q1<-p.adjust(p1,method="fdr")
+dim(q1)<-dim(p1)
+dimnames(q1)<-dimnames(p1)
+
+
+expr<-as.matrix(t(data1))
+cx<-sweep(expr,2,colMeans(expr),"-") 
+sv<-svd(cx)
+#pdf("svd_WGCNA_rosmap0821.pdf")
+corrplot(cor(sv$u[,1:10],samplerosmap))
+#dev.off()
+
+cor2<-cor(MEs,sv$u[,1:10],use="p")
+p2=corPvalueFisher(cor2,nSamples)
+q2<-p.adjust(p2,method="fdr")
+dim(q2)<-dim(p2)
+dimnames(q2)<-dimnames(p2)
+
+colnames(MEs)<-c("ME6","ME15","ME7","ME9","ME13","ME17","ME11","ME8","ME14","ME4","ME5","ME12","ME2","ME3","ME10","ME16","ME1","ME0")
+
+textMatrix =  paste(signif(cor1, 2), "\n(",
+                           signif(q1, 1), ")", sep = "")
+pdf("heatmap_rosmap0821.pdf")
+par(mar = c(6, 8.5, 3, 3))
+labeledHeatmap(Matrix = cor1,
+               xLabels = names(samplerosmap2),
+               yLabels = names(MEs2),
+               ySymbols = names(MEs2),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+dev.off()
+
+textMatrix =  paste(signif(cor2, 2), "\n(",
+                           signif(q2, 1), ")", sep = "")
+d<-c("factor1","factor2","factor3","factor4","factor5","factor6","factor7","factor8","factor9","factor10")
+pdf("heatmap_factors_rosmap0821.pdf")
+par(mar = c(6, 8.5, 3, 3))
+labeledHeatmap(Matrix = cor2,
+               xLabels = d,
+               yLabels = names(MEs),
+               ySymbols = names(MEs),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("Module-trait relationships"))
+dev.off()
+
+
+#modulePreservation  #用邻接矩阵做modulePreservation，如果用表达矩阵做会有bug（不是我做错的）
+#multiExpr是邻接矩阵用list连接起来，multiColor是reference的moduleColor
+
+load("net_agonal0821.RData")
+load("net_rosmap0821.RData")
+load("data_at0821.RData")
+datagonal<-normalize.quantiles(datExpr1)
+dimnames(datagonal)<-dimnames(datExpr1)
+datrosmap<-normalize.quantiles(datExpr2)
+dimnames(datrosmap)<-dimnames(datExpr2)
+#1
+setLabels<-c("rosmap","agonal")
+multiExpr<-list(rosmap=list(data=t(datrosmap)),agonal=list(data=t(datagonal)))
+multiColor<-list(rosmap=moduleColors2)
+#2
+setLabels<-c("agonal","rosmap")
+multiExpr<-list(agonal=list(data=t(datagonal)),rosmap=list(data=t(datrosmap)))
+multiColor<-list(agonal=moduleColors1)
+
+mp = modulePreservation(multiExpr, multiColor, dataIsExpr = TRUE, networkType = "signed", corFnc = "cor", corOptions = "use = 'p'", referenceNetworks = 1, testNetworks = NULL, nPermutations = 200, includekMEallInSummary = FALSE, restrictSummaryForGeneralNetworks = TRUE, calculateQvalue = FALSE, randomSeed = 12345, maxGoldModuleSize = 1000, maxModuleSize = 1000, quickCor = 1, verbose=3)
+
+ref=1
+test=2
+statsObs=cbind(mp$quality$observed[[ref]][[test]][,-1],mp$preservation$observed[[ref]][[test]][,-1])
+statsZ=cbind(mp$quality$Z[[ref]][[test]][,-1],mp$preservation$Z[[ref]][[test]][,-1])
+print(cbind(statsObs[,c("medianRank.pres","medianRank.qual")],signif(statsZ[,c("Zsummary.pres","Zsummary.qual")],2)))
+stats=cbind(statsObs[,c("medianRank.pres","medianRank.qual")],signif(statsZ[,c("Zsummary.pres","Zsummary.qual")],2))
+modColors=rownames(mp$preservation$observed[[ref]][[test]])
+moduleSizes=mp$preservation$Z[[ref]][[test]][,1]
+row.names(statsZ[stats$Zsummary.pres<10,])
+
+#去掉Z<10的module
+plotMods=!(modColors %in% row.names(statsZ[stats$Zsummary.pres<0,]))
+text=modColors[plotMods]
+plotData=cbind(mp$preservation$observed[[ref]][[test]][,2],mp$preservation$Z[[ref]][[test]][,2])
+#可视化
+mains = c("Preservation Median rank", "Preservation Zsummary")
+sizeGrWindow(10, 5)
+#分别把两个数据集作为背景的图
+# pdf("preservation1_0929.pdf",width=20,height=10)
+# pdf("preservation2_0929.pdf",width=20,height=10)
+par(mfrow = c(1,2))
+par(mar = c(4.5,4.5,2.5,1))
+for (p in 1:2){
+  min = min(plotData[, p], na.rm = TRUE)
+  max = max(plotData[, p], na.rm = TRUE)
+    if (p==2){ 
+		if (min > -max/10) min = -max/10 
+		ylim = c(min - 0.1 * (max-min), max + 0.1 * (max-min)) 
+		} else 
+		ylim = c(min - 0.1 * (max-min), max + 0.1 * (max-min))
+	 plot(moduleSizes[plotMods], plotData[plotMods, p], col = 1, bg = modColors[plotMods], pch = 21, main = mains[p], cex=2.4, ylab = mains[p], xlab = "Module size", log = "x",ylim=ylim, xlim=c(10,2000), cex.lab=1.2, cex.axis=1.2,cex.main=1.4)
+	 labelPoints(moduleSizes[plotMods], plotData[plotMods, p], text, cex = 1, offs = 0.08)
+	if (p==2){
+    abline(h=0)
+    abline(h=2, col = "blue", lty = 2)
+    abline(h=10, col = "darkgreen", lty = 2)
+	}
+}
+dev.off()
+
+
+#cell-type enrichment
+#rosmap
+data1<-normalize.quantiles(datExpr2)
+dimnames(data1)<-dimnames(datExpr2)
+colors = vector(mode="list")
+colors<-moduleColors2
+MEs = moduleEigengenes(expr = t(data1), colors, softPower = 12)
+eigmat = MEs$eigengenes
+colnames(eigmat) = gsub("ME","",colnames(eigmat))
+
+zhang.datExpr = read.csv("datExpr.zhangHuman.avgForPSI.csv",row.names=1)[,-1]
+set.seed(100)
+pSI.output = specificity.index(pSI.in=zhang.datExpr,bts=100,p_max=.1, e_min=0.3) 
+pSI.count(pSI.output)
+
+cell.p.zhang = matrix(NA, 18,5)
+rownames(cell.p.zhang) = unique(colors)
+colnames(cell.p.zhang) = colnames(pSI.output)
+
+for(mod in rownames(cell.p.zhang)) {
+    f = fisher.iteration(pSI.output, rownames(data1)[colors==mod],p.adjust = F)
+    cell.p.zhang[mod,] = f$`0.05 - nominal`
+}
+
+cell.p.zhang.fdr = p.adjust(cell.p.zhang,"fdr")
+dim(cell.p.zhang.fdr) = dim(cell.p.zhang)
+dimnames(cell.p.zhang.fdr) = dimnames(cell.p.zhang);
+to_plot = cell.p.zhang.fdr[c("midnightblue", "red", "black","magenta","salmon","grey60","greenyellow","pink","cyan","yellow","green","tan","blue","brown","purple","lightcyan","turquoise","grey"),]
+rownames(to_plot)<-c("ME6","ME15","ME7","ME9","ME13","ME17","ME11","ME8","ME14","ME4","ME5","ME12","ME2","ME3","ME10","ME16","ME1","ME0")
+
+dendro.col = as.dendrogram(hclust(as.dist(1-bicor(zhang.datExpr)), method="average"))
+denro.row= as.dendrogram(hclust(as.dist(1-bicor(eigmat[,c("midnightblue", "red", "black","magenta","salmon","grey60","greenyellow","pink","cyan","yellow","green","tan","blue","brown","purple","lightcyan","turquoise","grey")])),method="average"))
+
+pdf("CellType_rosmap0926.pdf",width=6,height=5)
+heatmap.2(-log10(to_plot),col=blueWhiteRed(1000,1)[500:1000],
+          scale="none",trace="none",cexRow = 0.8,cexCol = .8, density.info = "none",
+          colsep=0:7,rowsep=0:8,sepcolor="grey",sepwidth=c(0.02,0.02),
+          srtCol=45,offsetRow=0,offsetCol=-0.5,
+          Rowv=denro.row, Colv=dendro.col,
+          key=T,key.xlab="-log10(P)", cellnote=signif(to_plot,1), notecex=.8, notecol="black",main="Enrichment")
+dev.off()
+
+#agonal
+data1<-normalize.quantiles(datExpr1)
+dimnames(data1)<-dimnames(datExpr1)
+colors = vector(mode="list")
+colors<-moduleColors1
+MEs = moduleEigengenes(expr = t(data1), colors, softPower = 12)
+eigmat = MEs$eigengenes
+colnames(eigmat) = gsub("ME","",colnames(eigmat))
+
+zhang.datExpr = read.csv("datExpr.zhangHuman.avgForPSI.csv",row.names=1)[,-1]
+set.seed(100)
+pSI.output = specificity.index(pSI.in=zhang.datExpr,bts=100,p_max=.1, e_min=0.3) 
+pSI.count(pSI.output)
+
+cell.p.zhang = matrix(NA, 14,5)
+rownames(cell.p.zhang) = unique(colors)
+colnames(cell.p.zhang) = colnames(pSI.output)
+
+for(mod in rownames(cell.p.zhang)) {
+    f = fisher.iteration(pSI.output, rownames(data1)[colors==mod],p.adjust = F)
+    cell.p.zhang[mod,] = f$`0.05 - nominal`
+}
+
+cell.p.zhang.fdr = p.adjust(cell.p.zhang,"fdr")
+dim(cell.p.zhang.fdr) = dim(cell.p.zhang)
+dimnames(cell.p.zhang.fdr) = dimnames(cell.p.zhang);
+to_plot = cell.p.zhang.fdr[c("turquoise", "yellow","black","brown","green","grey","pink","red","blue","greenyellow","purple","magenta","salmon","tan"),]
+rownames(to_plot)<-c("ME0","ME8","ME1","ME2","ME4","ME10","ME3","ME7","ME5","ME9","ME6","ME11","ME12","ME13")
+
+dendro.col = as.dendrogram(hclust(as.dist(1-bicor(zhang.datExpr)), method="average"))
+denro.row= as.dendrogram(hclust(as.dist(1-bicor(eigmat[,c("turquoise", "yellow","black","brown","green","grey","pink","red","blue","greenyellow","purple","magenta","salmon","tan")])),method="average"))
+
+pdf("CellType_agonal0929.pdf",width=6,height=5)
+heatmap.2(-log10(to_plot),col=blueWhiteRed(1000,1)[500:1000],
+          scale="none",trace="none",cexRow = 0.8,cexCol = .8, density.info = "none",
+          colsep=0:7,rowsep=0:8,sepcolor="grey",sepwidth=c(0.02,0.02),
+          srtCol=45,offsetRow=0,offsetCol=-0.5,
+          Rowv=denro.row, Colv=dendro.col,
+          key=T,key.xlab="-log10(P)", cellnote=signif(to_plot,1), notecex=.8, notecol="black",main="Enrichment")
+dev.off()
+
+#module gene overlap
+h<-load("net_rosmap0821.RData")
+j<-load("net_agonal0821.RData")
+Labels.agonal = moduleLabels1
+Colors.agonal = moduleColors1
+Tree.agonal = geneTree1
+me.agonal = orderMEs(MEs1, greyName = "ME0")
+
+Labels.rosmap = moduleLabels2
+Colors.rosmap = moduleColors2
+Tree.rosmap = geneTree2
+me.rosmap = orderMEs(MEs2, greyName = "ME0")
+
+me.agonal.modulelabels=substring(names(me.agonal),3)
+me.rosmap.modulelabels=substring(names(me.rosmap),3)
+
+modules.agonal = labels2colors(as.numeric(me.agonal.modulelabels))
+modules.rosmap = labels2colors(as.numeric(me.rosmap.modulelabels))
+
+n.agonal = length(modules.agonal)
+n.rosmap = length(modules.rosmap)
+
+pTable = matrix(0, nrow = n.agonal, ncol = n.rosmap)
+countbl = matrix(0, nrow = n.agonal, ncol = n.rosmap)
+
+for (fmod in 1:n.agonal) 
+  for (cmod in 1:n.rosmap)
+  {
+    femMembers = (Colors.agonal == modules.agonal[fmod]);
+    consMembers =(Colors.rosmap == modules.rosmap[cmod])
+    pTable[fmod, cmod] = -log10(fisher.test(femMembers, consMembers, alternative = "greater")$p.value);
+    countbl[fmod, cmod] = sum(Colors.agonal == modules.agonal[fmod] & Colors.rosmap == modules.rosmap[cmod])
+  }
+
+pTable[is.infinite(pTable)] = 1.3*max(pTable[is.finite(pTable)])
+pTable[pTable>50 ] = 50
+
+modtotals.agonal=apply(countbl,1,sum)
+modtotals.rosmap=apply(countbl,2,sum)
+
+pdf(file="plotconsensusmodule0829.pdf")
+par(mfrow=c(1,1))
+par(cex = 1.0)
+par(mar=c(8, 10.4, 2.7, 1)+0.3)
+
+labeledHeatmap(Matrix = pTable,
+xLabels = paste(" ", modules.rosmap),
+yLabels = paste(" ", modules.agonal),
+colorLabels = TRUE,
+xSymbols = paste("rosmap", modules.rosmap, ": ", modtotals.rosmap, sep=""),
+ySymbols = paste("agonal ", modules.agonal, ": ", modtotals.agonal, sep=""),
+textMatrix = countbl,
+colors = greenWhiteRed(100)[50:100],
+main = "module.agonal&module.rosmap",
+cex.text = 1.0,
+cex.lab = 1.0,
+setStdMargins = FALSE)
+
+dev.off()
+
+
+###gene ontology
+geneinfo<-read.csv("geneinfo_rosmap0821.csv",header=T,row.names=1)
+turquoise<-geneinfo[which(geneinfo$color=="turquoise"),]
+brown<-geneinfo[which(geneinfo$color=="brown"),]
+
+go_turquoise<-gprofiler(query=as.vector(turquoise[,1]), max_set_size = 1000, correction_method = "fdr",hier_filtering = "strong", custom_bg = as.vector(turquoise[,1]), src_filter = c("GO", "KEGG"),ordered_query = T)
+c<-go_turquoise[order(go_turquoise$p.value)[1:min(10,nrow(go_turquoise))],]
+pdf("GO_turquoise.pdf")
+ggplot(c, aes(x=reorder(term.name, -log10(p.value)), y=-log10(p.value))) + geom_bar(stat="identity", fill="turquoise") + coord_flip() +labs(x='',title='module turquoise') + geom_hline(yintercept=-log10(0.05), lty=2, color="red")+theme(axis.text.y = element_text(size=15))
+dev.off()
+write.csv(c,file="go_turquoise.csv")
+
+
