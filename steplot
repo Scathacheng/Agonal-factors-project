@@ -1,0 +1,146 @@
+pairs(agonal,diag.panel=panel.hist,
+          upper.panel=panel.smooth,
+          lower.panel=panel.cor)
+
+panel.hist <- function(x, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(usr[1:2], 0, 1.5) )
+    h <- hist(x, plot = FALSE)
+    breaks <- h$breaks; nB <- length(breaks)
+    y <- h$counts; y <- y/max(y)
+    rect(breaks[-nB], 0, breaks[-1], y, col = "cyan", ...)
+}
+
+panel.cor <- function(x, y, digits=2, prefix="", cex.cor, ...)
+{
+    usr <- par("usr"); on.exit(par(usr))
+    par(usr = c(0, 1, 0, 1))
+    r <- cor(x, y)
+    txt <- format(c(r, 0.123456789), digits=digits)[1]
+    txt <- paste(prefix, txt, sep="")
+    if(missing(cex.cor)) cex.cor <- 0.8/strwidth(txt)
+    text(0.5, 0.5, txt, cex = cex.cor * r)
+}
+
+setwd("../data0523/rosmap/")
+a<-load("data_aft1006.RData")
+library(DESeq2)
+library(preprocessCore)
+
+data1<-2^datExpr2 
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+
+dds_rosmap1<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(fever))
+dds_rosmap1<-DESeq(dds_rosmap1)
+res_rosmap1<-results(dds_rosmap1)
+table(res_rosmap1$padj<0.05)
+# FALSE  TRUE 
+ # 5751   344 
+dds_rosmap2<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(infect))
+dds_rosmap2<-DESeq(dds_rosmap2)
+res_rosmap2<-results(dds_rosmap2)
+table(res_rosmap2$padj<0.05)
+# FALSE  TRUE 
+ # 8335    51
+dds_rosmap3<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(unconc))
+dds_rosmap3<-DESeq(dds_rosmap3)
+res_rosmap3<-results(dds_rosmap3)
+table(res_rosmap3$padj<0.05)
+# FALSE  TRUE 
+ # 4504     5 
+dds_rosmap4<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(brthprb))
+dds_rosmap4<-DESeq(dds_rosmap4)
+res_rosmap4<-results(dds_rosmap4)
+table(res_rosmap4$padj<0.05)
+# FALSE 
+ # 9092 
+dds_rosmap5<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(ventilat))
+dds_rosmap5<-DESeq(dds_rosmap5)
+res_rosmap5<-results(dds_rosmap5)
+table(res_rosmap5$padj<0.05)
+# FALSE 
+ # 9091 
+dds_rosmap6<-DESeqDataSetFromMatrix(countData=data2,colData=samplerosmap2,design=~as.factor(surgery))
+dds_rosmap6<-DESeq(dds_rosmap6)
+res_rosmap6<-results(dds_rosmap6)
+table(res_rosmap6$padj<0.05)
+# FALSE 
+ # 9092 
+
+fever<-res_rosmap1$log2FoldChange
+infect<-res_rosmap2$log2FoldChange
+unconc<-res_rosmap3$log2FoldChange
+brthprb<-res_rosmap4$log2FoldChange
+ventilat<-res_rosmap5$log2FoldChange
+surgery<-res_rosmap6$log2FoldChange
+
+data7<-matrix(NA,nrow=9092,ncol=6)
+data7[,1]<-fever
+data7[,2]<-infect
+data7[,3]<-unconc
+data7[,4]<-brthprb
+data7[,5]<-ventilat
+data7[,6]<-surgery
+rownames(data7)<-rownames(res_rosmap1)
+colnames(data7)<-c("fever","infect","unconc","brthprb","ventilat","surgery")
+
+cor(data7)
+               # fever      infect      unconc     brthprb   ventilat    surgery
+# fever     1.00000000  0.48855059  0.41645431 -0.02466603 -0.4760646 -0.1071418
+# infect    0.48855059  1.00000000 -0.08579497  0.19076176 -0.1205144 -0.4385677
+# unconc    0.41645431 -0.08579497  1.00000000 -0.30680641 -0.3812340  0.2890384
+# brthprb  -0.02466603  0.19076176 -0.30680641  1.00000000  0.3707474 -0.3841045
+# ventilat -0.47606464 -0.12051437 -0.38123400  0.37074740  1.0000000  0.0989534
+# surgery  -0.10714177 -0.43856768  0.28903841 -0.38410451  0.0989534  1.0000000
+
+P
+                # fever       infect       unconc      brthprb     ventilat      surgery
+# fever    0.000000e+00 8.225062e-18 9.625264e-13 6.913360e-01 7.779881e-17 8.346472e-02
+# infect   8.225062e-18 0.000000e+00 1.663149e-01 1.882980e-03 5.129930e-02 3.695853e-14
+# unconc   9.625264e-13 1.663149e-01 0.000000e+00 3.362750e-07 1.036191e-10 1.683862e-06
+# brthprb  6.913360e-01 1.882980e-03 3.362750e-07 0.000000e+00 3.727806e-10 7.235317e-11
+# ventilat 7.779881e-17 5.129930e-02 1.036191e-10 3.727806e-10 0.000000e+00 1.101025e-01
+# surgery  8.346472e-02 3.695853e-14 1.683862e-06 7.235317e-11 1.101025e-01 0.000000e+00
+FDR
+                # fever       infect       unconc      brthprb     ventilat      surgery
+# fever    0.000000e+00 3.701278e-17 2.475068e-12 6.913360e-01 2.800757e-16 1.001577e-01
+# infect   3.701278e-17 0.000000e+00 1.760982e-01 2.607203e-03 6.595625e-02 1.108756e-13
+# unconc   2.475068e-12 1.760982e-01 0.000000e+00 5.502682e-07 2.072382e-10 2.525792e-06
+# brthprb  6.913360e-01 2.607203e-03 5.502682e-07 0.000000e+00 6.710050e-10 1.627946e-10
+# ventilat 2.800757e-16 6.595625e-02 2.072382e-10 6.710050e-10 0.000000e+00 1.238653e-01
+# surgery  1.001577e-01 1.108756e-13 2.525792e-06 1.627946e-10 1.238653e-01 0.000000e+00
+
+data<-read.csv("data_peer1119.csv",header=T,row.names=1)
+expr<-as.matrix(data[,1:9092])
+pheno<-data[,9093:9109]
+agonal<-pheno[,11:16]
+cor(agonal)
+               # surgery     brthprb         fever      infect       unconc    ventilat
+# surgery   1.0000000000 -0.02183939  0.0007841666  0.08317111 -0.009496767  0.18941074
+# brthprb  -0.0218393913  1.00000000  0.1519078260  0.09681541  0.070436675  0.09519212
+# fever     0.0007841666  0.15190783  1.0000000000  0.23827405  0.084309091 -0.06182076
+# infect    0.0831711143  0.09681541  0.2382740451  1.00000000 -0.103801553  0.03902605
+# unconc   -0.0094967671  0.07043667  0.0843090913 -0.10380155  1.000000000  0.03016698
+# ventilat  0.1894107378  0.09519212 -0.0618207558  0.03902605  0.030166977  1.00000000
+
+P
+             # surgery    brthprb        fever       infect     unconc    ventilat
+# surgery  0.000000000 0.72519254 9.899310e-01 1.797219e-01 0.87852398 0.002031853
+# brthprb  0.725192543 0.00000000 1.374749e-02 1.180544e-01 0.25618629 0.124385204
+# fever    0.989930988 0.01374749 0.000000e+00 9.237061e-05 0.17381253 0.319162076
+# infect   0.179721950 0.11805442 9.237061e-05 0.000000e+00 0.09362722 0.529752443
+# unconc   0.878523981 0.25618629 1.738125e-01 9.362722e-02 0.00000000 0.627223211
+# ventilat 0.002031853 0.12438520 3.191621e-01 5.297524e-01 0.62722321 0.000000000
+
+FDR
+            # surgery    brthprb        fever       infect    unconc   ventilat
+# surgery  0.00000000 0.81584161 0.9899309881 0.2940904631 0.9302019 0.00731467
+# brthprb  0.81584161 0.00000000 0.0412424552 0.2487704074 0.3842794 0.24877041
+# fever    0.98993099 0.04124246 0.0000000000 0.0004156678 0.2940905 0.44191672
+# infect   0.29409046 0.24877041 0.0004156678 0.0000000000 0.2407557 0.68111028
+# unconc   0.93020186 0.38427943 0.2940904631 0.2407556959 0.0000000 0.75266785
+# ventilat 0.00731467 0.24877041 0.4419167203 0.6811102839 0.7526679 0.00000000
