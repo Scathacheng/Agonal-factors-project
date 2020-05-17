@@ -1,0 +1,108 @@
+setwd("../data0523/")
+a<-load("rosmap/data_aft1006.RData")
+library(DESeq2)
+library(preprocessCore)
+#0-1
+sample01<-sampleagonal[which(sampleagonal$agonal.factor!=3),]
+sample01<-sample01[which(sample01$agonal.factor!=2),]
+data01<-datExpr1[,rownames(sample01)]
+data1<-2^data01
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds01<-DESeqDataSetFromMatrix(countData=data2,colData=sample01,design=~as.factor(agonal.factor))
+dds01<-DESeq(dds01)
+res01<-results(dds01)
+#0-2
+sample02<-sampleagonal[which(sampleagonal$agonal.factor!=3),]
+sample02<-sample02[which(sample02$agonal.factor!=1),]
+data02<-datExpr1[,rownames(sample02)]
+data1<-2^data02
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds02<-DESeqDataSetFromMatrix(countData=data2,colData=sample02,design=~as.factor(agonal.factor))
+dds02<-DESeq(dds02)
+res02<-results(dds02)
+#0-3
+sample03<-sampleagonal[which(sampleagonal$agonal.factor!=1),]
+sample03<-sample03[which(sample03$agonal.factor!=2),]
+data03<-datExpr1[,rownames(sample03)]
+data1<-2^data03
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds03<-DESeqDataSetFromMatrix(countData=data2,colData=sample03,design=~as.factor(agonal.factor))
+dds03<-DESeq(dds03)
+res03<-results(dds03)
+#0-123
+sampleagonal[which(sampleagonal$agonal.factor==2),2]<-1
+sampleagonal[which(sampleagonal$agonal.factor==3),2]<-1
+data1<-2^datExpr1
+dataqn<-normalize.quantiles(data1)
+data2<-as.integer(dataqn)
+dim(data2)<-dim(data1)
+dimnames(data2)<-dimnames(data1)
+dds04<-DESeqDataSetFromMatrix(countData=data2,colData=sampleagonal,design=~as.factor(agonal.factor))
+dds04<-DESeq(dds04)
+res04<-results(dds04)
+ 
+write.csv(res01,file="rosmap/deseq2_afs01.csv") 
+write.csv(res02,file="rosmap/deseq2_afs02.csv")  
+write.csv(res03,file="rosmap/deseq2_afs03.csv") 
+write.csv(res04,file="rosmap/deseq2_afs04.csv") 
+ 
+res_fever<-read.csv("rosmap/deseq2_fever.csv",header=T,row.names=1)
+res_infect<-read.csv("rosmap/deseq2_infect.csv",header=T,row.names=1)
+res01<-read.csv("rosmap/deseq2_afs01.csv",header=T,row.names=1)
+res02<-read.csv("rosmap/deseq2_afs02.csv",header=T,row.names=1)
+res03<-read.csv("rosmap/deseq2_afs03.csv",header=T,row.names=1)
+res04<-read.csv("rosmap/deseq2_afs04.csv",header=T,row.names=1)
+
+res5<-res_fever[which(res_fever$padj<0.05),]
+res6<-res_fever[which(res_infect$padj<0.05),]
+res1<-res01[which(res01$padj<0.05),]#1992
+res2<-res02[which(res02$padj<0.05),]#2368
+res3<-res03[which(res03$padj<0.05),]#2660
+res4<-res04[which(res04$padj<0.05),]#3529
+
+a<-intersect(rownames(res_fever),rownames(res01)) #147
+a<-intersect(rownames(res_fever),rownames(res02)) #145
+a<-intersect(rownames(res_fever),rownames(res03)) #211
+a<-intersect(rownames(res_fever),rownames(res04)) #247
+a<-intersect(rownames(res_infect),rownames(res01)) #3
+a<-intersect(rownames(res_infect),rownames(res02)) #1
+a<-intersect(rownames(res_infect),rownames(res03)) #3
+a<-intersect(rownames(res_infect),rownames(res04)) #4
+
+library(org.Hs.eg.db)
+library(clusterProfiler)
+module<-list()
+module[[1]]<-res1
+module[[2]]<-res2
+module[[3]]<-res3
+module[[4]]<-res4
+
+enrich<-list()
+enrich[[1]]<-res5
+enrich[[2]]<-res6
+
+result_p<-matrix(NA,nrow=4,ncol=2)
+result_or<-matrix(NA,nrow=4,ncol=2)
+result_overlap<-matrix(NA,nrow=4,ncol=2)
+for (i in 1:4) {
+    for (j in 1:2) {
+a<-length(intersect(rownames(module[[i]]),rownames(enrich[[j]])))
+b<-length(intersect(rownames(enrich[[j]]),setdiff(rownames(res_fever),rownames(module[[i]]))))
+d<-length(intersect(rownames(module[[i]]),setdiff(rownames(res01),rownames(enrich[[j]]))))
+e<-length(intersect(setdiff(rownames(res_fever),rownames(module[[i]])),setdiff(rownames(res01),rownames(enrich[[j]]))))
+x<-c(b,e,a,d)
+dim(x)<-c(2,2)
+or<-(b*d)/(a*e)
+result_p[i,j]<-fisher.test(x)$p.value
+result_or[i,j]<-or
+result_overlap[i,j]<-a
+}}
