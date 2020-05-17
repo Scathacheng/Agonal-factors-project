@@ -1,0 +1,193 @@
+#服务器 R /zs32/home/jcdai/zouhan/ChIP/miniconda2/bin/R
+setwd("01WGCNA/07music/")
+# install devtools if necessary
+install.packages('devtools')
+# install the MuSiC package
+devtools::install_github('xuranw/MuSiC')
+# load
+library(MuSiC)
+library(SummarizedExperiment)
+library(xbioc)
+#rosmap bulk tissue data #这里是未校正的
+b<-load("rosmap_bulk.RData")
+data<-t(data_rosmap)
+mm<-model.matrix(~msex+race+spanish+educ+age_bl+age_death+pmi+ceradsc+niareagansc+braaksc, data=samplerosmap2)
+z<-apply(t(data),1,function(x){residuals(lm(x~mm))})
+tz<-t(z)
+datExpr2<-tz+colMeans(data)
+data_rosmap<-datExpr2
+#rosmap sc data
+sc_col<-read.csv("/zs32/home/jhtian/CellDeconvolution/COE/scdata/AD/filered/barcodes.tsv",header=F)
+sc_row<-read.csv("/zs32/home/jhtian/CellDeconvolution/COE/scdata/AD/filered/genes.tsv",header=F,sep="\t")
+meta<-read.table("/zs32/home/jhtian/CellDeconvolution/COE/scdata/AD/filtered_column_metadata.txt",header=T,sep="\t")
+library(Matrix)
+sc_matrix<-readMM("/zs32/home/jhtian/CellDeconvolution/COE/scdata/AD/filered/matrix.mtx")
+colnames(sc_matrix)<-sc_col[,1]
+rownames(sc_matrix)<-sc_row[,1]
+
+d<-intersect(rownames(sc_matrix),rownames(data_rosmap))
+sc_matrix<-sc_matrix[d,]
+data_rosmap<-data_rosmap[d,]
+samplerosmap2$projid<-rownames(samplerosmap2)
+
+
+######
+bcounts<-2^data_rosmap
+scounts<-as.matrix(sc_matrix)
+smeta<-meta
+bmeta<-samplerosmap2
+rownames(smeta)<-colnames(scounts)
+rownames(bmeta)<-colnames(bcounts)
+
+phenoData <- new("AnnotatedDataFrame",data=bmeta)
+bulkSet <- ExpressionSet(assayData=as.matrix(bcounts),
+  phenoData=phenoData,
+  annotation="hg38")
+  
+
+phenoData <- new("AnnotatedDataFrame",data=smeta)
+scSet <- ExpressionSet(assayData=scounts,
+  phenoData=phenoData,
+  annotation="hg38")
+
+
+Est.prop.adbulk = music_prop(bulk.eset = bulkSet, sc.eset = scSet, clusters = 'broad.cell.type', samples = 'projid', select.ct = c('Ast', 'End', 'Ex', 'In','Mic', 'Oli','Opc','Per'), verbose = F)
+
+prop<-Est.prop.adbulk$Est.prop.weighted
+save(bulkSet,scSet,Est.prop.adbulk,prop,file='rosmap_music_deconvolution2.RData')
+																	
+																	
+																	
+
+load("rosmap_music_deconvolution2.RData")																	
+#fever
+fever<-samplerosmap2[which(samplerosmap2$fever==1),]
+nonfever<-samplerosmap2[which(samplerosmap2$fever==0),]
+fever.prop<-prop[rownames(fever),] #65
+nonfever.prop<-prop[rownames(nonfever),]
+v.fever<-rbind(fever.prop,nonfever.prop)
+p.fever<-apply(v.fever,2,function(x){t.test(x[1:65],x[66:292])$p.value})
+#infect
+infect<-samplerosmap2[which(samplerosmap2$infect==1),]
+noninfect<-samplerosmap2[which(samplerosmap2$infect==0),]
+infect.prop<-prop[rownames(infect),] #50
+noninfect.prop<-prop[rownames(noninfect),]
+v.infect<-rbind(infect.prop,noninfect.prop)
+p.infect<-apply(v.infect,2,function(x){t.test(x[1:50],x[51:292])$p.value})
+#surgery
+surgery<-samplerosmap2[which(samplerosmap2$surgery==1),]
+nonsurgery<-samplerosmap2[which(samplerosmap2$surgery==0),]
+surgery.prop<-prop[rownames(surgery),] #8
+nonsurgery.prop<-prop[rownames(nonsurgery),]
+v.surgery<-rbind(surgery.prop,nonsurgery.prop)
+p.surgery<-apply(v.surgery,2,function(x){t.test(x[1:8],x[9:292])$p.value})
+#unconc
+unconc<-samplerosmap2[which(samplerosmap2$unconc==1),]
+nonunconc<-samplerosmap2[which(samplerosmap2$unconc==0),]
+unconc.prop<-prop[rownames(unconc),] #138
+nonunconc.prop<-prop[rownames(nonunconc),]
+v.unconc<-rbind(unconc.prop,nonunconc.prop)
+p.unconc<-apply(v.unconc,2,function(x){t.test(x[1:138],x[139:292])$p.value})
+#brthprb
+brthprb<-samplerosmap2[which(samplerosmap2$brthprb==1),]
+nonbrthprb<-samplerosmap2[which(samplerosmap2$brthprb==0),]
+brthprb.prop<-prop[rownames(brthprb),] #147
+nonbrthprb.prop<-prop[rownames(nonbrthprb),]
+v.brthprb<-rbind(brthprb.prop,nonbrthprb.prop)
+p.brthprb<-apply(v.brthprb,2,function(x){t.test(x[1:147],x[148:292])$p.value})
+#ventilat
+ventilat<-samplerosmap2[which(samplerosmap2$ventilat==1),]
+nonventilat<-samplerosmap2[which(samplerosmap2$ventilat==0),]
+ventilat.prop<-prop[rownames(ventilat),] #3
+nonventilat.prop<-prop[rownames(nonventilat),]
+v.ventilat<-rbind(ventilat.prop,nonventilat.prop)
+p.ventilat<-apply(v.ventilat,2,function(x){t.test(x[1:3],x[4:292])$p.value})
+
+
+#校正
+data_prop<-as.data.frame(prop)
+data<-t(data_rosmap)
+yy<-model.matrix(~Ast+End+Ex+Mic+Oli+Per, data=data_prop)
+z<-apply(t(data),1,function(x){residuals(lm(x~yy))})
+tz<-t(z)
+datExpr3<-tz+colMeans(data)
+data_rosmap<-datExpr3
+
+#单细胞数据
+sample_fever<-samplerosmap2[which(samplerosmap2$fever==1),]
+sample_nonfever<-samplerosmap2[which(samplerosmap2$fever==0),]
+a<-intersect(rownames(sample_fever),meta$projid)
+b<-intersect(rownames(sample_nonfever),meta$projid)
+a
+#[1] 11200645 11336574 20104101 20977678 21189544
+b
+#[1] 10101327 10260309 11342432 11409232 20173942 20207013 21126823
+meta_fever1<-meta[which(meta$projid==11200645),]
+meta_fever2<-meta[which(meta$projid==11336574),]
+meta_fever3<-meta[which(meta$projid==20104101),]
+meta_fever4<-meta[which(meta$projid==20977678),]
+meta_fever5<-meta[which(meta$projid==21189544),]
+meta_fever<-rbind(meta_fever1,meta_fever2,meta_fever3,meta_fever4,meta_fever5) #6889
+
+meta_nonfever1<-meta[which(meta$projid==10101327),]
+meta_nonfever2<-meta[which(meta$projid==10260309),]
+meta_nonfever3<-meta[which(meta$projid==11342432),]
+meta_nonfever4<-meta[which(meta$projid==11409232),]
+meta_nonfever5<-meta[which(meta$projid==20173942),]
+meta_nonfever6<-meta[which(meta$projid==20207013),]
+meta_nonfever7<-meta[which(meta$projid==21126823),]
+meta_nonfever<-rbind(meta_nonfever1,meta_nonfever2,meta_nonfever3,meta_nonfever4,meta_nonfever5,meta_nonfever6,meta_nonfever7) #10341
+
+meta_fever_ex<-meta_fever[which(meta_fever$broad.cell.type=='Ex'),] #3354
+meta_fever_mic<-meta_fever[which(meta_fever$broad.cell.type=='Mic'),] #246
+meta_nonfever_ex<-meta_nonfever[which(meta_nonfever$broad.cell.type=='Ex'),] #4747
+meta_nonfever_mic<-meta_nonfever[which(meta_nonfever$broad.cell.type=='Mic'),] #382
+
+sc_matrix_fever_ex<-sc_matrix[,meta_fever_ex$TAG]
+sc_matrix_fever_mic<-sc_matrix[,meta_fever_mic$TAG]
+sc_matrix_nonfever_ex<-sc_matrix[,meta_nonfever_ex$TAG]
+sc_matrix_nonfever_mic<-sc_matrix[,meta_nonfever_mic$TAG]
+
+meta_ex<-rbind(meta_fever_ex,meta_nonfever_ex)
+meta_mic<-rbind(meta_fever_mic,meta_nonfever_mic)
+sc_matrix_ex<-cbind(sc_matrix_fever_ex,sc_matrix_nonfever_ex)
+sc_matrix_mic<-cbind(sc_matrix_fever_mic,sc_matrix_nonfever_mic)
+
+p.ex<-apply(sc_matrix_ex,1,function(x){t.test(x[1:3354],x[3355:8101])$p.value})
+p.mic<-apply(sc_matrix_mic,1,function(x){t.test(x[1:246],x[247:628])$p.value})
+
+
+
+###取样上避免其他因素
+a<-load("sc_fever_diffgene.RData")
+meta_fever3<-meta_fever_ex[which(meta_fever_ex$projid==20104101),]
+meta_fever4<-meta_fever_ex[which(meta_fever_ex$projid==20977678),]
+meta_fever_ex2<-rbind(meta_fever3,meta_fever4) #1531
+meta_fever1<-meta_fever_mic[which(meta_fever_mic$projid==20104101),]
+meta_fever2<-meta_fever_mic[which(meta_fever_mic$projid==20977678),]
+meta_fever_mic2<-rbind(meta_fever1,meta_fever2) #91
+
+meta_nonfever6<-meta_nonfever_ex[which(meta_nonfever_ex$projid==20207013),]
+meta_nonfever7<-meta_nonfever_ex[which(meta_nonfever_ex$projid==21126823),]
+meta_nonfever_ex2<-rbind(meta_nonfever6,meta_nonfever7) #2321
+meta_nonfever8<-meta_nonfever_mic[which(meta_nonfever_mic$projid==20207013),]
+meta_nonfever9<-meta_nonfever_mic[which(meta_nonfever_mic$projid==21126823),]
+meta_nonfever_mic2<-rbind(meta_nonfever8,meta_nonfever9) #118
+
+library(Matrix)
+sc_matrix_fever_ex<-sc_matrix_fever_ex[,meta_fever_ex2$TAG]
+sc_matrix_fever_mic<-sc_matrix_fever_mic[,meta_fever_mic2$TAG]
+sc_matrix_nonfever_ex<-sc_matrix_nonfever_ex[,meta_nonfever_ex2$TAG]
+sc_matrix_nonfever_mic<-sc_matrix_nonfever_mic[,meta_nonfever_mic2$TAG]
+
+meta_ex<-rbind(meta_fever_ex2,meta_nonfever_ex2)
+meta_mic<-rbind(meta_fever_mic2,meta_nonfever_mic2)
+sc_matrix_ex<-cbind(sc_matrix_fever_ex,sc_matrix_nonfever_ex)
+sc_matrix_mic<-cbind(sc_matrix_fever_mic,sc_matrix_nonfever_mic)
+
+p.ex<-apply(sc_matrix_ex,1,function(x){wilcox.test(x[1:1531],x[1532:3852])$p.value})
+p.mic<-apply(sc_matrix_mic,1,function(x){wilcox.test(x[1:91],x[92:118])$p.value})
+p.ex<-as.matrix(p.ex)
+p.mic<-as.matrix(p.mic)
+write.csv(p.ex,"p_ex_sig.csv")
+write.csv(p.mic,"p_mic_sig.csv")
