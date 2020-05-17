@@ -1,0 +1,93 @@
+#clusterProfiler
+#gene ontology for agonal factors
+bitr(genelist,fromType="",toType="",OrgDb="org.Hs.eg.db",drop=TRUE)
+
+
+library(clusterProfiler)
+library(org.Hs.eg.db)
+setwd("../data0523/rosmap/")
+###fever
+fever<-read.csv("deseq2_fever.csv",header=T,stringsAsFactors=F,row.names=1)
+fever<-fever[which(fever$padj<0.05),]
+genelist<-fever$entrezid
+go <- enrichGO(genelist, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'ENTREZID')
+write.csv(go,file="go_fever.csv")
+barplot(go,showCategory=20,drop=T)
+dotplot(go,showCategory=50)
+pdf("go_fever.pdf",width=11,height=10)
+dotplot(go,showCategory=20,orderBy="Count")
+dev.off()
+pdf("barplot_go_fever.pdf",width=10,height=4)
+barplot(go,showCategory=15,orderBy="qvalue")
+dev.off()
+
+###infect
+infect<-read.csv("deseq2_infect.csv",header=T,stringsAsFactors=F,row.names=1)
+infect<-infect[which(infect$padj<0.05),]
+genelist<-infect$entrezid
+go <- enrichGO(genelist, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'ENTREZID')
+write.csv(go,file="go_infect.csv")
+barplot(go,showCategory=20,drop=T)
+dotplot(go,showCategory=50)
+pdf("go_infect.pdf",width=8,height=10)
+dotplot(go,showCategory=20)
+dev.off()
+pdf("barplot_go_infect.pdf",width=8,height=4)
+barplot(go,showCategory=15,orderBy="qvalue")
+dev.off()
+
+
+###WGCNA gene module
+module<-read.csv("modulegene.csv",header=T,stringsAsFactors=F,row.names=1)
+pink<-module[which(module$color=="pink"),]
+greenyellow<-module[which(module$color=="greenyellow"),]
+turquoise<-module[which(module$color=="turquoise"),]
+tank<-module[which(module$color=="tan"),]
+
+genelist1<-pink$entrezid
+go1 <- enrichGO(genelist1, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'ENTREZID')
+write.csv(go1,file="go_pink.csv")
+#barplot(go,showCategory=20,drop=T)
+#dotplot(go,showCategory=50)
+pdf("go_pink.pdf",width=10,height=10)
+dotplot(go1,showCategory=20)
+dev.off()
+
+genelist2<-greenyellow$entrezid
+go2 <- enrichGO(genelist2, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'ENTREZID')
+write.csv(go2,file="go_greenyellow.csv")
+#barplot(go,showCategory=20,drop=T)
+#dotplot(go,showCategory=50)
+pdf("go_greenyellow.pdf",width=8,height=10)
+dotplot(go2,showCategory=20)
+dev.off()
+pdf("barplot_go_greenyellow.pdf",width=6,height=3)
+barplot(go2,showCategory=10,orderBy="qvalue")
+dev.off()
+
+
+genelist3<-turquoise$entrezid
+go3 <- enrichGO(genelist3, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'ENTREZID')
+write.csv(go3,file="go_turquoise.csv")
+#barplot(go,showCategory=20,drop=T)
+#dotplot(go,showCategory=50)
+pdf("go_turquoise.pdf",width=8,height=10)
+dotplot(go3,showCategory=20)
+dev.off()
+pdf("barplot_go_turquoise.pdf",width=8,height=3)
+barplot(go3,showCategory=10,orderBy="qvalue")
+dev.off()
+
+
+genelist4<-tank$entrezid
+go4 <- enrichGO(genelist4, OrgDb = org.Hs.eg.db, ont='ALL',pAdjustMethod = 'BH',pvalueCutoff = 0.05, qvalueCutoff = 0.2,keyType = 'ENTREZID')
+write.csv(go4,file="go_tan.csv")
+#barplot(go,showCategory=20,drop=T)
+#dotplot(go,showCategory=50)
+pdf("go_tan.pdf",width=9,height=8)
+dotplot(go4,showCategory=20)
+dev.off()
+pdf("barplot_go_tan.pdf",width=9,height=3)
+barplot(go4,showCategory=10,orderBy="qvalue")
+dev.off()
+
