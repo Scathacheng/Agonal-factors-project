@@ -1,0 +1,191 @@
+#peer只有在服务器上才有
+#并且服务器上不能读取笔记本做的RData
+setwd("01WGCNA/06agonal")
+library(peer)
+library(preprocessCore)
+library(WGCNA)
+factorList=list()
+residList=list()
+data<-read.csv("data_peer1119.csv",header=T,row.names=1)
+expr<-as.matrix(data[,1:9092])
+pheno<-data[,9093:9109]
+expr1<-t(normalize.quantiles(t(expr)))
+dimnames(expr1)<-dimnames(expr)
+## Data input: 
+## [expr]: expression matrix, N rows and G columns, where N is the number of samples, and G is the number of genes. No column or row names.
+#数据应该先quantile normalization
+nFactor=15
+model = PEER()  # create the model object
+PEER_setPhenoMean(model,expr1)  # set the observed data
+PEER_setNk(model,nFactor) # gradient number of factors
+PEER_getNk(model)
+PEER_setAdd_mean(model, TRUE)  # include an additional factor 
+PEER_update(model)  # perform the inference
+factors = PEER_getX(model)
+factors1<-t(factors)[-1,]
+colnames(factors1)<-rownames(expr)
+rownames(factors1)<-paste("Factor",1:nrow(factors1),sep="")
+write.table(factors1, file=paste("expr.peerCovariates.factor",nFactor,".xls",sep=""), sep="\t", row.names=T, quote=F,col.names=NA)
+
+cor1<-cor(t(factors1),pheno[,11:17])
+p1=corPvalueFisher(cor1,nSamples=262)
+textMatrix =  paste(signif(cor1, 2), "\n(",
+                           signif(p1, 1), ")", sep = "")
+pdf("heatmap_peer_cor.pdf")
+par(mar = c(6, 8.5, 3, 3))
+labeledHeatmap(Matrix = cor1,
+               xLabels = colnames(cor1),
+               yLabels = rownames(cor1),
+               ySymbols = rownames(cor1),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("hidden factors-agonal durations relationships"))
+dev.off()
+
+#服务器上没有lme4，又到自己的电脑上做
+##correction
+data<-read.csv("data_peer1119.csv",header=T,row.names=1)
+expr<-as.matrix(data[,1:9092])
+pheno<-data[,9093:9109]
+expr1<-t(normalize.quantiles(t(expr)))
+dimnames(expr1)<-dimnames(expr)
+factors1<-read.table("expr.peerCovariates.factor15.xls",header=T,sep="\t",row.names=1)
+factors2<-factors1[c(1,2,4,5,8,9,10,12,13,15),]
+colnames(factors2)<-rownames(expr1)
+z<-apply(t(expr1),1,function(x){residuals(lm(x~t(factors2)))})
+tz<-t(z)
+Expr2<-tz+rowMeans(t(expr1))
+
+library(lme4)
+##pvca_module
+# theDataMatrix<-t(expr1)
+# exp_design<-pheno[,11:16]
+# theDataMatrix<-Expr2
+########################################################################
+pct_threshold=0.8
+
+dataRowN<-nrow(theDataMatrix)
+dataColN<-ncol(theDataMatrix)
+
+theDataMatrixCentered <- matrix(data = 0, nrow = dataRowN, ncol = dataColN)
+theDataMatrixCentered_transposed = apply(theDataMatrix, 1, scale, center = TRUE, scale = FALSE)
+theDataMatrixCentered = t(theDataMatrixCentered_transposed)
+expDesignRowN <- nrow(exp_design)
+expDesignColN <- ncol(exp_design)
+myColNames <- names(exp_design)
+
+theDataCor <- cor(theDataMatrixCentered)
+
+eigenData <- eigen(theDataCor)
+eigenValues = eigenData$values
+ev_n <- length(eigenValues)
+eigenVectorsMatrix = eigenData$vectors
+eigenValuesSum = sum(eigenValues)
+percents_PCs = eigenValues /eigenValuesSum 
+
+my_counter_2 = 0
+my_sum_2 = 1
+for (i in ev_n:1){
+my_sum_2  = my_sum_2 - percents_PCs[i]
+	if ((my_sum_2) <= pct_threshold ){
+		my_counter_2 = my_counter_2 + 1
+	}
+
+}
+if (my_counter_2 < 3){
+	pc_n  = 3
+
+}else {
+	pc_n = my_counter_2 
+}
+
+pc_data_matrix <- matrix(data = 0, nrow = (expDesignRowN*pc_n), ncol = 1)
+mycounter = 0
+for (i in 1:pc_n){
+	for (j in 1:expDesignRowN){
+	mycounter <- mycounter + 1
+		pc_data_matrix[mycounter,1] = eigenVectorsMatrix[j,i]
+
+	}
+}
+
+AAA <- exp_design[rep(1:expDesignRowN,pc_n),]
+
+Data <- cbind(AAA,pc_data_matrix)
+
+variables <- c(colnames(exp_design))
+    for (i in 1:length(variables)) {
+        Data$variables[i] <- as.factor(Data$variables[i])
+    }
+op <- options(warn = (-1))
+    # effects_n = expDesignColN + choose(expDesignColN, 2) + 1
+	effects_n = expDesignColN + 1
+    randomEffectsMatrix <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+
+model.func <- c()
+    index <- 1
+    for (i in 1:length(variables)) {
+        mod = paste("(1|", variables[i], ")", sep = "")
+        model.func[index] = mod
+        index = index + 1
+    }
+    # for (i in 1:(length(variables) - 1)) {
+       # for (j in (i + 1):length(variables)) {
+           # mod = paste("(1|", variables[i], ":", variables[j], 
+               # ")", sep = "")
+           # model.func[index] = mod
+           # index = index + 1
+       # }
+    # }
+    function.mods <- paste(model.func, collapse = " + ")
+    
+    for (i in 1:pc_n) {
+        y = (((i - 1) * expDesignRowN) + 1)
+        funct <- paste("pc_data_matrix", function.mods, sep = " ~ ")
+        Rm1ML <- lmer(funct, Data[y:(((i - 1) * expDesignRowN) + 
+            expDesignRowN), ], REML = TRUE, control=lmerControl(check.nobs.vs.nlev = "ignore",check.nobs.vs.rankZ = "ignore",check.nobs.vs.nRE="ignore"),verbose = FALSE, 
+            na.action = na.omit)
+        randomEffects <- Rm1ML
+        randomEffectsMatrix[i, ] <- c(unlist(VarCorr(Rm1ML)), 
+            resid = sigma(Rm1ML)^2)
+    }
+    effectsNames <- c(names(getME(Rm1ML, "cnms")), "resid")
+
+randomEffectsMatrixStdze <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+for (i in 1:pc_n){
+	mySum = sum(randomEffectsMatrix[i,])
+	for (j in 1:effects_n){
+		randomEffectsMatrixStdze[i,j] = randomEffectsMatrix[i,j]/mySum	
+	}
+}
+randomEffectsMatrixWtProp <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+for (i in 1:pc_n){
+	weight = eigenValues[i]/eigenValuesSum
+	for (j in 1:effects_n){
+		randomEffectsMatrixWtProp[i,j] = randomEffectsMatrixStdze[i,j]*weight
+	}
+}
+randomEffectsSums <- matrix(data = 0, nrow = 1, ncol = effects_n)
+randomEffectsSums <-colSums(randomEffectsMatrixWtProp)
+totalSum = sum(randomEffectsSums)
+randomEffectsMatrixWtAveProp <- matrix(data = 0, nrow = 1, ncol = effects_n)
+
+for (j in 1:effects_n){
+	randomEffectsMatrixWtAveProp[j] = randomEffectsSums[j]/totalSum 	
+	
+}
+# pdf("pvca_peer_before.pdf",height=3.5)
+# pdf("pvca_peer_after.pdf",height=3.5)
+bp <- barplot(randomEffectsMatrixWtAveProp,  xlab = "Effects", ylab = "Weighted average proportion variance", ylim= c(0,1.0),col = c("blue"), las=2,title="pvca of Cortex")
+axis(1, at = bp, labels = effectsNames, xlab = "Effects", las=2,cex.axis=0.5)
+## replace the above code of "axis(1, at = bp, labels = effectsNames, xlab = "Effects", cex.axis = 0.5, las=2)" if you want rotate the x axis labels. 
+## text(bp, par("usr")[3]-0.02, srt = 45, adj = 1,labels = effectsNames, xpd = TRUE,cex=0.8)
+values = randomEffectsMatrixWtAveProp
+new_values = round(values , 3) ## new_values=format(values,scientific=TRUE,digit=3) 科学计数的形式保留三位有效数字
+text(bp,randomEffectsMatrixWtAveProp,labels = new_values,srt=90, pos=3,cex=0.8) # place numbers on top of bars  srt=90旋转上标
+# dev.off()
+########################################################################
