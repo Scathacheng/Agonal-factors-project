@@ -1,0 +1,186 @@
+setwd("../data0523/rosmap/")
+a<-load("data_bf_1006.RData")
+
+library(sva)
+expr<-as.matrix(data_rosmap)
+mod=model.matrix(~as.factor(race),data=samplerosmap2)
+mod0<-model.matrix(~1,data=samplerosmap2)
+n.sv<-num.sv(expr,mod,method="be")
+svobj<-sva(expr,mod,mod0,n.sv=n.sv)
+
+pheno<-samplerosmap2[,11:17]
+library(corrplot)
+pdf("corplot_ukfactor_cor.pdf")
+corrplot(cor(svobj$sv,pheno))
+dev.off()
+
+library(WGCNA)
+cor2<-cor(svobj$sv,pheno,use="p")
+p2=corPvalueFisher(cor2,nSamples=262)
+q2<-p.adjust(p2,method="fdr")
+dim(q2)<-dim(p2)
+dimnames(q2)<-dimnames(p2)
+
+textMatrix =  paste(signif(cor2, 2), "\n(",
+                           signif(p2, 1), ")", sep = "")
+pdf("heatmap_ukfactor_cor.pdf")
+par(mar = c(6, 8.5, 3, 3))
+labeledHeatmap(Matrix = cor2,
+               xLabels = names(pheno),
+               yLabels = c("sv1","sv2","sv3","sv4","sv5","sv6","sv7","sv8","sv9","sv10","sv11","sv12","sv13","sv14","sv15","sv16"),
+               ySymbols = c("sv1","sv2","sv3","sv4","sv5","sv6","sv7","sv8","sv9","sv10","sv11","sv12","sv13","sv14","sv15","sv16"),
+               colorLabels = FALSE,
+               colors = greenWhiteRed(50),
+               textMatrix = textMatrix,
+               setStdMargins = FALSE,
+               cex.text = 0.5,
+               zlim = c(-1,1),
+               main = paste("surrogate variables-agonal durations relationships"))
+dev.off()
+
+#sva correction
+pValues<-f.pvalue(expr,mod,mod0)
+qValues<-p.adjust(pValues,method="BH")
+
+modSv<-cbind(mod,svobj$sv)
+mod0Sv<-cbind(mod0,svobj$sv)
+pValuesSv<-f.pvalue(expr,modSv,mod0Sv)
+qValuesSv<-p.adjust(pValuesSv,method="BH")
+
+#linear correction
+factors1<-svobj$sv[,c(1,2,4,5,6,7,9,10,12,14)]
+z<-apply(expr,1,function(x){residuals(lm(x~factors1))})
+tz<-t(z)
+Expr2<-tz+rowMeans(expr)
+
+
+library(lme4)
+
+# theDataMatrix<-expr
+# exp_design<-samplerosmap2/pheno
+# theDataMatrix<-Expr2
+########################################################################
+pct_threshold=0.8
+
+dataRowN<-nrow(theDataMatrix)
+dataColN<-ncol(theDataMatrix)
+
+theDataMatrixCentered <- matrix(data = 0, nrow = dataRowN, ncol = dataColN)
+theDataMatrixCentered_transposed = apply(theDataMatrix, 1, scale, center = TRUE, scale = FALSE)
+theDataMatrixCentered = t(theDataMatrixCentered_transposed)
+expDesignRowN <- nrow(exp_design)
+expDesignColN <- ncol(exp_design)
+myColNames <- names(exp_design)
+
+theDataCor <- cor(theDataMatrixCentered)
+
+eigenData <- eigen(theDataCor)
+eigenValues = eigenData$values
+ev_n <- length(eigenValues)
+eigenVectorsMatrix = eigenData$vectors
+eigenValuesSum = sum(eigenValues)
+percents_PCs = eigenValues /eigenValuesSum 
+
+my_counter_2 = 0
+my_sum_2 = 1
+for (i in ev_n:1){
+my_sum_2  = my_sum_2 - percents_PCs[i]
+	if ((my_sum_2) <= pct_threshold ){
+		my_counter_2 = my_counter_2 + 1
+	}
+
+}
+if (my_counter_2 < 3){
+	pc_n  = 3
+
+}else {
+	pc_n = my_counter_2 
+}
+
+pc_data_matrix <- matrix(data = 0, nrow = (expDesignRowN*pc_n), ncol = 1)
+mycounter = 0
+for (i in 1:pc_n){
+	for (j in 1:expDesignRowN){
+	mycounter <- mycounter + 1
+		pc_data_matrix[mycounter,1] = eigenVectorsMatrix[j,i]
+
+	}
+}
+
+AAA <- exp_design[rep(1:expDesignRowN,pc_n),]
+
+Data <- cbind(AAA,pc_data_matrix)
+
+variables <- c(colnames(exp_design))
+    for (i in 1:length(variables)) {
+        Data$variables[i] <- as.factor(Data$variables[i])
+    }
+op <- options(warn = (-1))
+    # effects_n = expDesignColN + choose(expDesignColN, 2) + 1
+	effects_n = expDesignColN + 1
+    randomEffectsMatrix <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+
+model.func <- c()
+    index <- 1
+    for (i in 1:length(variables)) {
+        mod = paste("(1|", variables[i], ")", sep = "")
+        model.func[index] = mod
+        index = index + 1
+    }
+    # for (i in 1:(length(variables) - 1)) {
+       # for (j in (i + 1):length(variables)) {
+           # mod = paste("(1|", variables[i], ":", variables[j], 
+               # ")", sep = "")
+           # model.func[index] = mod
+           # index = index + 1
+       # }
+    # }
+    function.mods <- paste(model.func, collapse = " + ")
+    
+    for (i in 1:pc_n) {
+        y = (((i - 1) * expDesignRowN) + 1)
+        funct <- paste("pc_data_matrix", function.mods, sep = " ~ ")
+        Rm1ML <- lmer(funct, Data[y:(((i - 1) * expDesignRowN) + 
+            expDesignRowN), ], REML = TRUE, control=lmerControl(check.nobs.vs.nlev = "ignore",check.nobs.vs.rankZ = "ignore",check.nobs.vs.nRE="ignore"),verbose = FALSE, 
+            na.action = na.omit)
+        randomEffects <- Rm1ML
+        randomEffectsMatrix[i, ] <- c(unlist(VarCorr(Rm1ML)), 
+            resid = sigma(Rm1ML)^2)
+    }
+    effectsNames <- c(names(getME(Rm1ML, "cnms")), "resid")
+
+randomEffectsMatrixStdze <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+for (i in 1:pc_n){
+	mySum = sum(randomEffectsMatrix[i,])
+	for (j in 1:effects_n){
+		randomEffectsMatrixStdze[i,j] = randomEffectsMatrix[i,j]/mySum	
+	}
+}
+randomEffectsMatrixWtProp <- matrix(data = 0, nrow = pc_n, ncol = effects_n)
+for (i in 1:pc_n){
+	weight = eigenValues[i]/eigenValuesSum
+	for (j in 1:effects_n){
+		randomEffectsMatrixWtProp[i,j] = randomEffectsMatrixStdze[i,j]*weight
+	}
+}
+randomEffectsSums <- matrix(data = 0, nrow = 1, ncol = effects_n)
+randomEffectsSums <-colSums(randomEffectsMatrixWtProp)
+totalSum = sum(randomEffectsSums)
+randomEffectsMatrixWtAveProp <- matrix(data = 0, nrow = 1, ncol = effects_n)
+
+for (j in 1:effects_n){
+	randomEffectsMatrixWtAveProp[j] = randomEffectsSums[j]/totalSum 	
+	
+}
+# pdf("pvca_sv_before.pdf",height=3.5)
+# pdf("pvca_sv_after.pdf",height=3.5)
+bp <- barplot(randomEffectsMatrixWtAveProp,  xlab = "Effects", ylab = "Weighted average proportion variance", ylim= c(0,1.0),col = c("blue"), las=2,title="pvca of Cortex")
+axis(1, at = bp, labels = effectsNames, xlab = "Effects", las=2,cex.axis=0.5)
+## replace the above code of "axis(1, at = bp, labels = effectsNames, xlab = "Effects", cex.axis = 0.5, las=2)" if you want rotate the x axis labels. 
+## text(bp, par("usr")[3]-0.02, srt = 45, adj = 1,labels = effectsNames, xpd = TRUE,cex=0.8)
+values = randomEffectsMatrixWtAveProp
+new_values = round(values , 3) ## new_values=format(values,scientific=TRUE,digit=3) 科学计数的形式保留三位有效数字
+text(bp,randomEffectsMatrixWtAveProp,labels = new_values,srt=90, pos=3,cex=0.8) # place numbers on top of bars  srt=90旋转上标
+# dev.off()
+########################################################################
+
